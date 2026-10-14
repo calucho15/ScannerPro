@@ -20,6 +20,7 @@ frontend/android/app/build/
 frontend/android/captures/
 frontend/android/.externalNativeBuild/
 frontend/android/.cxx/
+frontend/android/.kotlin/
 frontend/android/local.properties
 *.apk
 *.aab
