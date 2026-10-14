@@ -1,0 +1,399 @@
+import React, { useState, useEffect } from 'react';
+import {
+  FileText,
+  Download,
+  Share2,
+  Cloud,
+  Plus,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  ExternalLink,
+  CheckCircle2,
+  ArrowLeft,
+  Check,
+  MessageCircle,
+  Edit2,
+  Crop,
+  Image as ImageIcon,
+  Maximize2,
+  X,
+  Sparkles
+} from 'lucide-react';
+import { generatePdf, uploadToDrive } from '../services/api';
+import { shareFileNative, downloadFileLocal } from '../services/shareService';
+
+export default function DocumentViewer({
+  pages = [], // Array de blobs de imágenes procesadas
+  docTitle,
+  onTitleChange,
+  onAddPage,
+  onDeletePage,
+  onEditPageCrop,
+  onEditPageFilter,
+  onBackToHome,
+  onFinishAndSave,
+  driveStatus,
+  onOpenDriveModal
+}) {
+  const [currentPageIdx, setCurrentPageIdx] = useState(0);
+  const [pageUrls, setPageUrls] = useState([]);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isUploadingDrive, setIsUploadingDrive] = useState(false);
+  const [driveResult, setDriveResult] = useState(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showEditMenu, setShowEditMenu] = useState(false);
+  const [showSaveMenu, setShowSaveMenu] = useState(false);
+
+  useEffect(() => {
+    // Generar URLs para previsualizar cada página
+    const urls = pages.map((blob) => {
+      try {
+        return URL.createObjectURL(blob);
+      } catch (e) {
+        return null;
+      }
+    });
+    setPageUrls(urls);
+
+    return () => {
+      setTimeout(() => {
+        urls.forEach((u) => {
+          if (u) {
+            try { URL.revokeObjectURL(u); } catch (e) {}
+          }
+        });
+      }, 10000);
+    };
+  }, [pages]);
+
+  const getCompiledPdfBlob = async () => {
+    return await generatePdf(pages, true, 88);
+  };
+
+  // Compartir PDF directamente a WhatsApp, Telegram, etc.
+  const handleSharePdf = async () => {
+    if (pages.length === 0) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pdfBlob = await getCompiledPdfBlob();
+      const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
+      await shareFileNative(pdfBlob, fileName, docTitle);
+    } catch (err) {
+      alert("Error al compartir PDF: " + err.message);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // Compartir página actual como imagen JPEG
+  const handleShareCurrentPageImage = async () => {
+    if (pages.length === 0) return;
+    try {
+      const currentBlob = pages[currentPageIdx];
+      const fileName = `${docTitle.trim() || 'Escaneo'}_pag_${currentPageIdx + 1}.jpg`;
+      await shareFileNative(currentBlob, fileName, `${docTitle} - Pág ${currentPageIdx + 1}`);
+    } catch (err) {
+      alert("Error al compartir imagen: " + err.message);
+    }
+  };
+
+  // Guardar PDF en el almacenamiento local del teléfono
+  const handleDownloadPdf = async () => {
+    if (pages.length === 0) return;
+    setIsGeneratingPdf(true);
+    setShowSaveMenu(false);
+    try {
+      const pdfBlob = await getCompiledPdfBlob();
+      const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
+      await downloadFileLocal(pdfBlob, fileName);
+    } catch (err) {
+      alert("Error al guardar PDF: " + err.message);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // Guardar imagen JPEG actual en el teléfono
+  const handleDownloadImage = async () => {
+    if (pages.length === 0) return;
+    setShowSaveMenu(false);
+    try {
+      const currentBlob = pages[currentPageIdx];
+      const fileName = `${docTitle.trim() || 'Escaneo'}_pag_${currentPageIdx + 1}.jpg`;
+      await downloadFileLocal(currentBlob, fileName);
+    } catch (err) {
+      alert("Error al guardar imagen: " + err.message);
+    }
+  };
+
+  const handleFinish = async () => {
+    if (pages.length === 0) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pdfBlob = await getCompiledPdfBlob();
+      onFinishAndSave({
+        title: docTitle.trim() || 'Documento_Escaneado',
+        pages,
+        pdfBlob,
+        thumbnailBlob: pages[0]
+      });
+    } catch (e) {
+      alert("Error al compilar documento: " + e.message);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleUploadDrive = async () => {
+    if (!driveStatus?.authenticated) {
+      onOpenDriveModal();
+      return;
+    }
+
+    setIsUploadingDrive(true);
+    setDriveResult(null);
+    try {
+      const pdfBlob = await getCompiledPdfBlob();
+      const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
+      const result = await uploadToDrive(pdfBlob, fileName, 'Mi CamScanner');
+      setDriveResult(result);
+    } catch (err) {
+      alert("Error al subir a Google Drive: " + err.message);
+    } finally {
+      setIsUploadingDrive(false);
+    }
+  };
+
+  if (pages.length === 0) {
+    return (
+      <div className="empty-doc-state">
+        <p>No hay páginas en este documento.</p>
+        <button className="btn-primary" onClick={onAddPage}>
+          <Plus className="w-5 h-5 mr-2" />
+          Añadir Página
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="doc-viewer-screen">
+      {/* Encabezado con título editable */}
+      <div className="doc-viewer-header">
+        <button className="icon-btn-ghost" onClick={onBackToHome} title="Inicio">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div className="doc-title-input-wrapper">
+          <input
+            type="text"
+            className="doc-title-input"
+            value={docTitle}
+            onChange={(e) => onTitleChange(e.target.value)}
+            placeholder="Título del documento..."
+          />
+        </div>
+        <button
+          className="btn-finish-doc"
+          onClick={handleFinish}
+          disabled={isGeneratingPdf}
+          title="Guardar y Compartir"
+        >
+          {isGeneratingPdf ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+          ) : (
+            <Check className="w-4 h-4 mr-1 text-black font-bold" />
+          )}
+          <span>Listo</span>
+        </button>
+      </div>
+
+      {/* Visor central de la página actual */}
+      <div className="doc-page-main-container">
+        {pageUrls[currentPageIdx] && (
+          <div className="doc-page-card" onClick={() => setIsFullScreen(true)}>
+            <img
+              src={pageUrls[currentPageIdx]}
+              alt={`Página ${currentPageIdx + 1}`}
+              className="doc-page-image"
+            />
+            <div className="page-counter-badge">
+              Página {currentPageIdx + 1} de {pages.length}
+            </div>
+            <button className="btn-zoom-overlay" title="Ver en pantalla completa">
+              <Maximize2 className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        )}
+
+        {/* Flechas de navegación entre páginas */}
+        {pages.length > 1 && (
+          <>
+            <button
+              className="page-nav-btn prev"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentPageIdx((prev) => Math.max(0, prev - 1));
+              }}
+              disabled={currentPageIdx === 0}
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <button
+              className="page-nav-btn next"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentPageIdx((prev) => Math.min(pages.length - 1, prev + 1));
+              }}
+              disabled={currentPageIdx === pages.length - 1}
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Barra de Edición de Página: Re-recortar o Cambiar Filtros */}
+      <div className="page-edit-toolbar">
+        <button
+          className="btn-edit-page-action"
+          onClick={() => onEditPageCrop(currentPageIdx, pages[currentPageIdx])}
+        >
+          <Crop className="w-4 h-4 mr-1.5 text-emerald-400" />
+          <span>Re-ajustar Recorte</span>
+        </button>
+
+        <button
+          className="btn-edit-page-action"
+          onClick={() => onEditPageFilter(currentPageIdx, pages[currentPageIdx])}
+        >
+          <Sparkles className="w-4 h-4 mr-1.5 text-cyan-400" />
+          <span>Cambiar Filtro</span>
+        </button>
+
+        {pages.length > 1 && (
+          <button
+            className="btn-edit-page-delete"
+            onClick={() => {
+              if (window.confirm(`¿Eliminar página ${currentPageIdx + 1}?`)) {
+                onDeletePage(currentPageIdx);
+                if (currentPageIdx >= pages.length - 1) {
+                  setCurrentPageIdx(Math.max(0, pages.length - 2));
+                }
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4 text-red-400" />
+          </button>
+        )}
+      </div>
+
+      {/* Miniaturas de todas las páginas */}
+      <div className="thumbnails-strip">
+        <button className="thumb-add-btn" onClick={onAddPage} title="Añadir otra página">
+          <Plus className="w-5 h-5 text-emerald-400" />
+          <span>Añadir</span>
+        </button>
+
+        {pageUrls.map((url, idx) => (
+          <div
+            key={idx}
+            className={`thumbnail-item ${idx === currentPageIdx ? 'selected' : ''}`}
+            onClick={() => setCurrentPageIdx(idx)}
+          >
+            <img src={url} alt={`Miniatura ${idx + 1}`} />
+            <span className="thumb-index">{idx + 1}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Mensaje de éxito de subida a Drive si aplica */}
+      {driveResult && (
+        <div className="drive-success-card">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 mr-2 flex-shrink-0" />
+          <div className="drive-success-text">
+            <span>¡Subido exitosamente a Google Drive!</span>
+            {driveResult.web_view_link && (
+              <a
+                href={driveResult.web_view_link}
+                target="_blank"
+                rel="noreferrer"
+                className="drive-link"
+              >
+                Ver en Google Drive <ExternalLink className="w-3.5 h-3.5 ml-1 inline" />
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Acciones de Compartición y Guardado Nativo */}
+      <div className="doc-action-bar">
+        {/* Compartir PDF directamente */}
+        <button
+          className="action-pill-btn whatsapp-btn"
+          onClick={handleSharePdf}
+          disabled={isGeneratingPdf}
+          title="Compartir PDF adjunto por WhatsApp y aplicaciones"
+        >
+          <MessageCircle className="w-5 h-5 mr-1 text-emerald-400" />
+          <span>Compartir PDF</span>
+        </button>
+
+        {/* Compartir Imagen JPG directamente */}
+        <button
+          className="action-pill-btn image-share-btn"
+          onClick={handleShareCurrentPageImage}
+          title="Compartir página actual como imagen JPG"
+        >
+          <ImageIcon className="w-5 h-5 mr-1 text-cyan-400" />
+          <span>Compartir Imagen</span>
+        </button>
+
+        {/* Menú Guardar en Teléfono */}
+        <div className="relative-save-box">
+          <button
+            className="action-pill-btn download-btn"
+            onClick={() => setShowSaveMenu(!showSaveMenu)}
+          >
+            <Download className="w-5 h-5 mr-1" />
+            <span>Guardar</span>
+          </button>
+
+          {showSaveMenu && (
+            <div className="save-options-dropdown">
+              <button onClick={handleDownloadPdf}>
+                <FileText className="w-4 h-4 mr-2 text-emerald-400" />
+                Guardar como PDF
+              </button>
+              <button onClick={handleDownloadImage}>
+                <ImageIcon className="w-4 h-4 mr-2 text-cyan-400" />
+                Guardar Página como JPG
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal de Pantalla Completa para Inspección de Página */}
+      {isFullScreen && pageUrls[currentPageIdx] && (
+        <div className="fullscreen-doc-modal" onClick={() => setIsFullScreen(false)}>
+          <div className="fullscreen-modal-header">
+            <span>{docTitle} • Página {currentPageIdx + 1} de {pages.length}</span>
+            <button className="icon-btn-close" onClick={() => setIsFullScreen(false)}>
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
+          <div className="fullscreen-modal-body">
+            <img
+              src={pageUrls[currentPageIdx]}
+              alt={`Página ${currentPageIdx + 1} completa`}
+              className="fullscreen-image"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

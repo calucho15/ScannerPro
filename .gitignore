@@ -1,0 +1,46 @@
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.venv/
+env/
+
+# Android / Gradle
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/captures/
+frontend/android/.externalNativeBuild/
+frontend/android/.cxx/
+frontend/android/local.properties
+*.apk
+*.aab
+
+# Testing and Temporary Artifacts
+.playwright-mcp/
+test_*.jpg
+test_*.png
+crop_*.png
+e2e_*.png
+filter_*.png
+scanner_icon_512.png
+
+# IDE / OS
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
