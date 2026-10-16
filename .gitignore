@@ -22,6 +22,7 @@ frontend/android/.externalNativeBuild/
 frontend/android/.cxx/
 frontend/android/.kotlin/
 frontend/android/local.properties
+ScannerPro/
 *.apk
 *.aab
 
