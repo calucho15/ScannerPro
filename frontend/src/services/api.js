@@ -9,7 +9,9 @@ import {
   applyFilterLocal,
   generatePdfLocal,
   detectCornersLocal,
-  rotateImageBlob
+  rotateImageBlob,
+  applyPhotoWhiteBackground,
+  generateIdPhotoSheet
 } from './localProcessor';
 import { Capacitor } from '@capacitor/core';
 
@@ -213,4 +215,18 @@ export async function uploadToDrive(fileBlob, filename, folderName = 'Mi CamScan
     throw new Error(err.detail || 'Error subiendo archivo a Google Drive.');
   }
   return await res.json();
+}
+
+/**
+ * Remueve el fondo de una fotografía de retrato/persona y lo sustituye por blanco puro
+ */
+export async function removePhotoBackground(imageBlob, options = {}) {
+  return await applyPhotoWhiteBackground(imageBlob, options);
+}
+
+/**
+ * Crea una plantilla de fotos carnet lista para imprimir en papel 4x6"
+ */
+export async function createIdPhotoSheet(imageBlob, count = 6) {
+  return await generateIdPhotoSheet(imageBlob, count);
 }

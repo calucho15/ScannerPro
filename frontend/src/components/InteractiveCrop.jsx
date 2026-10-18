@@ -118,7 +118,7 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     const canvas = loupeCanvasRef.current;
     const ctx = canvas.getContext('2d');
     const [nx, ny] = corners[activeCornerIdx];
-    const zoom = 2.5;
+    const zoom = 1.45; // Zoom ligero y ergonómico para apuntar con precisión
     const size = 110;
 
     ctx.clearRect(0, 0, size, size);

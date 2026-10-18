@@ -733,3 +733,59 @@ export async function generatePdfLocal(pagesBlobs, fitToA4 = true, qualityPreset
 
   return pdf.output('blob');
 }
+
+/**
+ * Genera una plantilla de fotos carnet lista para imprimir (formato 4x6" / 10x15 cm)
+ * con guías de corte finas para tijera/guillotina.
+ */
+export async function generateIdPhotoSheet(photoBlob, count = 6) {
+  const img = await loadImageFromBlob(photoBlob);
+  const pw = img.naturalWidth || img.width;
+  const ph = img.naturalHeight || img.height;
+
+  // Lienzo 4x6" a 300 DPI = 1800 x 1200 px (apaisado)
+  const sheetW = 1800;
+  const sheetH = 1200;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = sheetW;
+  canvas.height = sheetH;
+  const ctx = canvas.getContext('2d');
+
+  // Fondo blanco puro
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, sheetW, sheetH);
+
+  // Cuadrícula de 2 filas x 3 columnas (6 fotos)
+  const cols = 3;
+  const rows = 2;
+  const marginX = 120;
+  const marginY = 80;
+  const gapX = 60;
+  const gapY = 60;
+
+  const cellW = (sheetW - 2 * marginX - (cols - 1) * gapX) / cols;
+  const cellH = (sheetH - 2 * marginY - (rows - 1) * gapY) / rows;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = marginX + c * (cellW + gapX);
+      const y = marginY + r * (cellH + gapY);
+
+      // Dibujar foto ajustada
+      ctx.drawImage(img, x, y, cellW, cellH);
+
+      // Dibujar línea fina de guía de corte
+      ctx.strokeStyle = '#D1D5DB';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, cellW, cellH);
+    }
+  }
+
+  // Marcas de encabezado
+  ctx.fillStyle = '#6B7280';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText('ScannerPro • Plantilla de Fotos Carnet (Fondo Blanco)', marginX, 45);
+
+  return await canvasToBlob(canvas, 0.95);
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Sparkles, CheckCircle2, ShieldCheck, Zap, Image as ImageIcon, Camera, FileText } from 'lucide-react';
+import { X, Sparkles, CheckCircle2, ShieldCheck, Zap, Image as ImageIcon, Camera, FileText, UserCheck, Layers, RefreshCw } from 'lucide-react';
 
 export default function ChangelogModal({ isOpen, onClose }) {
   if (!isOpen) return null;
@@ -9,7 +9,7 @@ export default function ChangelogModal({ isOpen, onClose }) {
       <div className="modal-card changelog-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="flex items-center gap-2">
-            <span className="version-badge-pill">v1.1.0</span>
+            <span className="version-badge-pill">v1.2.0</span>
             <h3 className="modal-title">Novedades de la Versión</h3>
           </div>
           <button className="icon-btn-ghost" onClick={onClose} title="Cerrar">
@@ -18,51 +18,51 @@ export default function ChangelogModal({ isOpen, onClose }) {
         </div>
 
         <div className="modal-body changelog-body">
-          {/* Versión 1.1.0 */}
+          {/* Versión 1.2.0 */}
           <div className="changelog-version-block current">
             <div className="version-header-row">
-              <span className="version-tag current">v1.1.0 (Actual)</span>
+              <span className="version-tag current">v1.2.0 (Actual)</span>
               <span className="version-date">Octubre 2026</span>
             </div>
 
             <ul className="changelog-features-list">
               <li>
                 <div className="feat-icon-box bg-purple-500/20 text-purple-400">
-                  <ImageIcon className="w-4 h-4" />
+                  <UserCheck className="w-4 h-4" />
                 </div>
                 <div className="feat-content">
-                  <strong>Modo Quitar Fondo (Fondo Blanco para Fotos)</strong>
-                  <p>Nuevo modo inteligente para fotografías, retratos, fotos carnet y objetos. Elimina el fondo y lo reemplaza por blanco puro (#FFFFFF) con selector de tolerancia.</p>
+                  <strong>Nueva Herramienta: Estudio Foto Carnet</strong>
+                  <p>Módulo independiente para fotos a personas con remoción de fondo a blanco puro (#FFFFFF), selector de tolerancia, muestreo táctil y generación de plantilla 4x6" con 6 fotos listas para imprimir.</p>
                 </div>
               </li>
 
               <li>
                 <div className="feat-icon-box bg-emerald-500/20 text-emerald-400">
-                  <Sparkles className="w-4 h-4" />
+                  <Layers className="w-4 h-4" />
                 </div>
                 <div className="feat-content">
-                  <strong>Modo Documento Blanco Puro</strong>
-                  <p>Blanquea 100% el papel y elimina sombras e iluminación despareja conservando firmas a bolígrafo azul/rojo, sellos y logos a todo color.</p>
+                  <strong>Rediseño Integral sin AI Clichés</strong>
+                  <p>Interfaz limpia y profesional centrada en herramientas utilitarias, sin textos de marketing ni frases de comparación.</p>
                 </div>
               </li>
 
               <li>
                 <div className="feat-icon-box bg-cyan-500/20 text-cyan-400">
-                  <Zap className="w-4 h-4" />
+                  <RefreshCw className="w-4 h-4" />
                 </div>
                 <div className="feat-content">
-                  <strong>Lupa de Precisión en Recorte</strong>
-                  <p>Al arrastrar cualquier esquina, aparece una lupa flotante con zoom 2.5x y cruz de mira para encuadrar con precisión milimétrica sin que el pulgar tape la vista.</p>
+                  <strong>Barra de Carga entre Procesos</strong>
+                  <p>Indicador visual animado con porcentaje numérico para conocer el progreso en tiempo real durante cada etapa.</p>
                 </div>
               </li>
 
               <li>
                 <div className="feat-icon-box bg-amber-500/20 text-amber-400">
-                  <Camera className="w-4 h-4" />
+                  <Zap className="w-4 h-4" />
                 </div>
                 <div className="feat-content">
-                  <strong>Cuadrícula de Alineación & Rotación 90°</strong>
-                  <p>Cuadrícula perspectiva de 3x3 (Regla de Tercios) con botón para ocultar/mostrar guías y rotación de imágenes con 1 solo toque.</p>
+                  <strong>Lupa con Zoom Ligero (1.45x)</strong>
+                  <p>Ajuste de aumento ergonómico para una puntería perfecta y sin desorientación en los bordes del papel.</p>
                 </div>
               </li>
 
@@ -71,9 +71,31 @@ export default function ChangelogModal({ isOpen, onClose }) {
                   <FileText className="w-4 h-4" />
                 </div>
                 <div className="feat-content">
-                  <strong>Selector de Calidad de PDF (WhatsApp vs HD)</strong>
-                  <p>Elige entre PDF Ligero (~250 KB) para enviar volando por WhatsApp con pocos datos, o Máxima Calidad para impresión y archivo.</p>
+                  <strong>Formato Oficial de Archivo</strong>
+                  <p>Nombres generados automáticamente en formato estándar: Escaneo_Dia-Mes-Año (ej. Escaneo_18-10-2026).</p>
                 </div>
+              </li>
+            </ul>
+          </div>
+
+          {/* Versión 1.1.0 */}
+          <div className="changelog-version-block">
+            <div className="version-header-row">
+              <span className="version-tag">v1.1.0</span>
+              <span className="version-date">Mejoras de Visión</span>
+            </div>
+            <ul className="changelog-features-list small">
+              <li>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <span>Modo Documento Blanco Puro con firmas y sellos preservados.</span>
+              </li>
+              <li>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <span>Selector de calidad PDF (Ligero WhatsApp vs Máxima Nitidez).</span>
+              </li>
+              <li>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <span>Cuadrícula 3x3 de perspectiva y rotación rápida de 90°.</span>
               </li>
             </ul>
           </div>
@@ -87,32 +109,14 @@ export default function ChangelogModal({ isOpen, onClose }) {
             <ul className="changelog-features-list small">
               <li>
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>Aplicación independiente para Android (APK) sin publicidad ni marcas de agua.</span>
+                <span>Aplicación independiente para Android (APK) 100% offline y sin publicidad.</span>
               </li>
               <li>
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>Recorte interactivo y corrección de perspectiva.</span>
-              </li>
-              <li>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>Filtros Magic Color y B&W Limpio con OpenCV local.</span>
-              </li>
-              <li>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>Compartir archivos PDF e imágenes adjuntas reales por WhatsApp.</span>
-              </li>
-              <li>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>Biblioteca local IndexedDB y respaldo opcional en Google Drive.</span>
+                <span>Transformación de perspectiva y compartición nativa de archivos a WhatsApp.</span>
               </li>
             </ul>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn-primary w-full" onClick={onClose}>
-            Entendido
-          </button>
         </div>
       </div>
     </div>

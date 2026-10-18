@@ -1,30 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
   CheckCircle,
-  Share2,
   Download,
-  Cloud,
-  Edit2,
   Home,
   Plus,
   Loader2,
-  ExternalLink,
   MessageCircle,
   Check,
   Eye,
   Image as ImageIcon,
-  FileText
+  FileText,
+  Edit2
 } from 'lucide-react';
-import { uploadToDrive, generatePdf } from '../services/api';
+import { generatePdf } from '../services/api';
 import { renameDocument } from '../services/storage';
 import { shareFileNative, downloadFileLocal } from '../services/shareService';
+import ProgressBar from './ProgressBar';
 
 export default function ShareCompleteScreen({
   docRecord, // Objeto del documento guardado en IndexedDB
   onGoHome,
   onScanAnother,
-  driveStatus,
-  onOpenDriveModal,
   onDocUpdated,
   onViewFullDoc
 }) {
@@ -32,9 +28,9 @@ export default function ShareCompleteScreen({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState(docRecord?.title || '');
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
-  const [isSharing, setIsSharing] = useState(false);
-  const [isUploadingDrive, setIsUploadingDrive] = useState(false);
-  const [driveResult, setDriveResult] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processProgress, setProcessProgress] = useState(0);
+  const [processStatus, setProcessStatus] = useState('');
 
   useEffect(() => {
     if (docRecord?.thumbnailBlob) {
@@ -69,7 +65,9 @@ export default function ShareCompleteScreen({
       return docRecord.pdfBlob;
     }
     if (docRecord?.pages && docRecord.pages.length > 0) {
-      return await generatePdf(docRecord.pages, true, 88);
+      setProcessProgress(30);
+      setProcessStatus('Generando archivo PDF...');
+      return await generatePdf(docRecord.pages, true, 'standard');
     }
     throw new Error("No hay páginas para generar el PDF");
   };
@@ -80,15 +78,20 @@ export default function ShareCompleteScreen({
 
   // 1. Compartir PDF directamente (WhatsApp y aplicaciones con archivo real adjunto)
   const handleSharePdf = async () => {
-    setIsSharing(true);
+    setIsProcessing(true);
+    setProcessProgress(20);
+    setProcessStatus('Preparando PDF para compartir...');
     try {
       const pdfBlob = await getPdfBlob();
+      setProcessProgress(80);
+      setProcessStatus('Abriendo menú de aplicaciones...');
       const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
       await shareFileNative(pdfBlob, fileName, docTitle);
+      setProcessProgress(100);
     } catch (err) {
       alert("Error al compartir PDF: " + err.message);
     } finally {
-      setIsSharing(false);
+      setIsProcessing(false);
     }
   };
 
@@ -99,25 +102,34 @@ export default function ShareCompleteScreen({
       alert("No hay imagen disponible para compartir.");
       return;
     }
-    setIsSharing(true);
+    setIsProcessing(true);
+    setProcessProgress(50);
+    setProcessStatus('Preparando imagen...');
     try {
       const fileName = `${docTitle.trim() || 'Escaneo'}.jpg`;
       await shareFileNative(imgBlob, fileName, docTitle);
+      setProcessProgress(100);
     } catch (err) {
       alert("Error al compartir imagen: " + err.message);
     } finally {
-      setIsSharing(false);
+      setIsProcessing(false);
     }
   };
 
   // 3. Guardar PDF en el almacenamiento local del teléfono
   const handleDownloadPdf = async () => {
+    setIsProcessing(true);
+    setProcessProgress(40);
+    setProcessStatus('Descargando PDF en tu dispositivo...');
     try {
       const pdfBlob = await getPdfBlob();
       const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
       await downloadFileLocal(pdfBlob, fileName);
+      setProcessProgress(100);
     } catch (err) {
       alert("Error al guardar PDF: " + err.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -128,31 +140,17 @@ export default function ShareCompleteScreen({
       alert("No hay imagen disponible.");
       return;
     }
+    setIsProcessing(true);
+    setProcessProgress(50);
+    setProcessStatus('Guardando imagen en tu galería...');
     try {
       const fileName = `${docTitle.trim() || 'Escaneo'}.jpg`;
       await downloadFileLocal(imgBlob, fileName);
+      setProcessProgress(100);
     } catch (err) {
       alert("Error al guardar imagen: " + err.message);
-    }
-  };
-
-  // 5. Subir a Google Drive
-  const handleUploadDrive = async () => {
-    if (!driveStatus?.authenticated) {
-      onOpenDriveModal();
-      return;
-    }
-    setIsUploadingDrive(true);
-    setDriveResult(null);
-    try {
-      const pdfBlob = await getPdfBlob();
-      const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
-      const res = await uploadToDrive(pdfBlob, fileName, 'Mi CamScanner');
-      setDriveResult(res);
-    } catch (err) {
-      alert("Error subiendo a Google Drive: " + err.message);
     } finally {
-      setIsUploadingDrive(false);
+      setIsProcessing(false);
     }
   };
 
@@ -164,7 +162,7 @@ export default function ShareCompleteScreen({
           <CheckCircle className="w-10 h-10 text-emerald-400" />
         </div>
         <h2 className="complete-title">¡Documento Listo!</h2>
-        <p className="complete-subtitle">Tu documento ha sido procesado y guardado con éxito.</p>
+        <p className="complete-subtitle">Tu documento ha sido procesado y guardado en la memoria local.</p>
       </div>
 
       {/* Tarjeta del Documento interactiva (Click para ver y re-editar) */}
@@ -216,10 +214,8 @@ export default function ShareCompleteScreen({
           <span className="doc-date-text">
             {new Date(docRecord?.createdAt || Date.now()).toLocaleDateString('es-ES', {
               day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
+              month: '2-digit',
+              year: 'numeric'
             })}
           </span>
 
@@ -241,75 +237,48 @@ export default function ShareCompleteScreen({
         </button>
       )}
 
-      {/* Mensaje de subida a Drive */}
-      {driveResult && (
-        <div className="drive-success-card">
-          <CheckCircle className="w-5 h-5 text-emerald-400 mr-2 flex-shrink-0" />
-          <div className="drive-success-text">
-            <span>¡Subido exitosamente a Google Drive!</span>
-            {driveResult.web_view_link && (
-              <a
-                href={driveResult.web_view_link}
-                target="_blank"
-                rel="noreferrer"
-                className="drive-link"
-              >
-                Ver en Drive <ExternalLink className="w-3.5 h-3.5 ml-1 inline" />
-              </a>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Botones de Compartir Principales */}
       <div className="share-actions-group">
         <button
           className="btn-share-whatsapp"
           onClick={handleSharePdf}
-          disabled={isSharing}
+          disabled={isProcessing}
         >
-          {isSharing ? (
-            <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          ) : (
-            <MessageCircle className="w-5 h-5 mr-2" />
-          )}
+          <MessageCircle className="w-5 h-5 mr-2" />
           <span>Compartir PDF (WhatsApp / Apps)</span>
         </button>
 
         <button
           className="btn-share-other"
           onClick={handleShareImage}
-          disabled={isSharing}
+          disabled={isProcessing}
         >
           <ImageIcon className="w-5 h-5 mr-2 text-cyan-400" />
           <span>Compartir como Imagen JPG</span>
         </button>
 
         <div className="secondary-share-grid">
-          <button className="btn-secondary-action" onClick={handleDownloadPdf}>
+          <button className="btn-secondary-action" onClick={handleDownloadPdf} disabled={isProcessing}>
             <FileText className="w-4 h-4 mr-2 text-emerald-400" />
             Guardar PDF
           </button>
 
-          <button className="btn-secondary-action" onClick={handleDownloadImage}>
+          <button className="btn-secondary-action" onClick={handleDownloadImage} disabled={isProcessing}>
             <Download className="w-4 h-4 mr-2 text-cyan-400" />
             Guardar JPG
           </button>
         </div>
-
-        <button
-          className={`btn-secondary-action w-full mt-1 ${driveStatus?.authenticated ? 'connected' : ''}`}
-          onClick={handleUploadDrive}
-          disabled={isUploadingDrive}
-        >
-          {isUploadingDrive ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2 text-emerald-400" />
-          ) : (
-            <Cloud className="w-4 h-4 mr-2 text-emerald-400" />
-          )}
-          {driveStatus?.authenticated ? 'Subir respaldo a Google Drive' : 'Conectar con Google Drive'}
-        </button>
       </div>
+
+      {/* Barra de progreso */}
+      {isProcessing && (
+        <ProgressBar
+          progress={processProgress}
+          title="Preparando archivo"
+          statusText={processStatus}
+          isOverlay={true}
+        />
+      )}
 
       {/* Navegación Inferior */}
       <div className="complete-bottom-nav">

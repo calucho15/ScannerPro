@@ -2,15 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Download,
-  Share2,
-  Cloud,
   Plus,
   Trash2,
   ChevronLeft,
   ChevronRight,
   Loader2,
-  ExternalLink,
-  CheckCircle2,
   ArrowLeft,
   Check,
   MessageCircle,
@@ -20,12 +16,12 @@ import {
   X,
   Sparkles,
   RotateCw,
-  Sliders,
   Zap,
   Printer
 } from 'lucide-react';
-import { generatePdf, uploadToDrive, rotateImage } from '../services/api';
+import { generatePdf, rotateImage } from '../services/api';
 import { shareFileNative, downloadFileLocal } from '../services/shareService';
+import ProgressBar from './ProgressBar';
 
 export default function DocumentViewer({
   pages = [], // Array de blobs de imágenes procesadas
@@ -37,16 +33,14 @@ export default function DocumentViewer({
   onEditPageCrop,
   onEditPageFilter,
   onBackToHome,
-  onFinishAndSave,
-  driveStatus,
-  onOpenDriveModal
+  onFinishAndSave
 }) {
   const [currentPageIdx, setCurrentPageIdx] = useState(0);
   const [pageUrls, setPageUrls] = useState([]);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [isUploadingDrive, setIsUploadingDrive] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [pdfStatusText, setPdfStatusText] = useState('');
   const [isRotatingPage, setIsRotatingPage] = useState(false);
-  const [driveResult, setDriveResult] = useState(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
   const [pdfQualityPreset, setPdfQualityPreset] = useState('standard'); // 'lightweight' | 'standard' | 'hd'
@@ -74,7 +68,22 @@ export default function DocumentViewer({
   }, [pages]);
 
   const getCompiledPdfBlob = async (preset = pdfQualityPreset) => {
-    return await generatePdf(pages, true, preset);
+    setPdfProgress(20);
+    setPdfStatusText('Iniciando páginas del documento...');
+    const timer = setInterval(() => {
+      setPdfProgress((p) => (p < 85 ? p + 15 : p));
+    }, 180);
+
+    try {
+      const blob = await generatePdf(pages, true, preset);
+      clearInterval(timer);
+      setPdfProgress(100);
+      setPdfStatusText('PDF compilado con éxito');
+      return blob;
+    } catch (e) {
+      clearInterval(timer);
+      throw e;
+    }
   };
 
   // Rotar página actual 90°
@@ -164,26 +173,6 @@ export default function DocumentViewer({
       alert("Error al compilar documento: " + e.message);
     } finally {
       setIsGeneratingPdf(false);
-    }
-  };
-
-  const handleUploadDrive = async () => {
-    if (!driveStatus?.authenticated) {
-      onOpenDriveModal();
-      return;
-    }
-
-    setIsUploadingDrive(true);
-    setDriveResult(null);
-    try {
-      const pdfBlob = await getCompiledPdfBlob(pdfQualityPreset);
-      const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
-      const result = await uploadToDrive(pdfBlob, fileName, 'Mi CamScanner');
-      setDriveResult(result);
-    } catch (err) {
-      alert("Error al subir a Google Drive: " + err.message);
-    } finally {
-      setIsUploadingDrive(false);
     }
   };
 
@@ -372,26 +361,6 @@ export default function DocumentViewer({
         ))}
       </div>
 
-      {/* Mensaje de éxito de subida a Drive si aplica */}
-      {driveResult && (
-        <div className="drive-success-card">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 mr-2 flex-shrink-0" />
-          <div className="drive-success-text">
-            <span>¡Subido exitosamente a Google Drive!</span>
-            {driveResult.web_view_link && (
-              <a
-                href={driveResult.web_view_link}
-                target="_blank"
-                rel="noreferrer"
-                className="drive-link"
-              >
-                Ver en Google Drive <ExternalLink className="w-3.5 h-3.5 ml-1 inline" />
-              </a>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Barra de Acciones de Compartición y Guardado Nativo */}
       <div className="doc-action-bar">
         {/* Compartir PDF directamente */}
@@ -439,6 +408,16 @@ export default function DocumentViewer({
           )}
         </div>
       </div>
+
+      {/* Barra de Progreso al generar PDF */}
+      {isGeneratingPdf && (
+        <ProgressBar
+          progress={pdfProgress}
+          title="Compilando Documento PDF"
+          statusText={pdfStatusText}
+          isOverlay={true}
+        />
+      )}
 
       {/* Modal de Pantalla Completa para Inspección de Página */}
       {isFullScreen && pageUrls[currentPageIdx] && (

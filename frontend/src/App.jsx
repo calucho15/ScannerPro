@@ -6,9 +6,9 @@ import InteractiveCrop from './components/InteractiveCrop';
 import FilterScreen from './components/FilterScreen';
 import DocumentViewer from './components/DocumentViewer';
 import ShareCompleteScreen from './components/ShareCompleteScreen';
-import GDriveModal from './components/GDriveModal';
+import PortraitStudio from './components/PortraitStudio';
 import ChangelogModal from './components/ChangelogModal';
-import { getDriveStatus, warpPerspective } from './services/api';
+import { warpPerspective } from './services/api';
 import { generateDemoDocumentBlob } from './services/demoDoc';
 import {
   getAllDocuments,
@@ -29,12 +29,11 @@ const VIEW_STATES = {
   FILTER: 'FILTER',
   DOCUMENT: 'DOCUMENT',
   SHARE_COMPLETE: 'SHARE_COMPLETE',
+  PORTRAIT_STUDIO: 'PORTRAIT_STUDIO',
 };
 
 export default function App() {
   const [currentView, setCurrentView] = useState(VIEW_STATES.HOME);
-  const [driveStatus, setDriveStatus] = useState(null);
-  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   // Biblioteca de documentos guardados en IndexedDB
@@ -46,7 +45,7 @@ export default function App() {
   
   // Documento actual multipágina
   const [docPages, setDocPages] = useState([]);
-  const [docTitle, setDocTitle] = useState(createNewDocTitle());
+  const [docTitle, setDocTitle] = useState(() => createNewDocTitle([]));
 
   // Rastreo de re-edición
   const [editingDocId, setEditingDocId] = useState(null);
@@ -55,24 +54,29 @@ export default function App() {
   // Último documento completado para la pantalla de compartir
   const [lastFinishedDoc, setLastFinishedDoc] = useState(null);
 
-  function createNewDocTitle() {
+  /**
+   * Genera el nombre del archivo en formato: Escaneo_Dia-Mes-Año (Ej. Escaneo_18-10-2026)
+   */
+  function createNewDocTitle(docs = savedDocs) {
     const d = new Date();
-    return `Escaneo_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const base = `Escaneo_${day}-${month}-${year}`;
+
+    const existingCount = docs.filter(
+      (doc) => doc.title === base || (doc.title && doc.title.startsWith(`${base} `))
+    ).length;
+
+    if (existingCount > 0) {
+      return `${base} (${existingCount + 1})`;
+    }
+    return base;
   }
 
   useEffect(() => {
-    refreshDriveStatus();
     loadSavedDocuments();
   }, []);
-
-  const refreshDriveStatus = async () => {
-    try {
-      const status = await getDriveStatus();
-      setDriveStatus(status);
-    } catch (e) {
-      console.warn("Backend no disponible:", e);
-    }
-  };
 
   const loadSavedDocuments = async () => {
     try {
@@ -91,7 +95,6 @@ export default function App() {
         handleImageReady(photoBlob);
       }
     } else {
-      // Input capture fallback
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
@@ -270,38 +273,56 @@ export default function App() {
           thumbnailBlob
         });
       }
+
       await loadSavedDocuments();
       setLastFinishedDoc(saved);
       setCurrentView(VIEW_STATES.SHARE_COMPLETE);
-    } catch (e) {
-      alert("Error guardando el documento: " + e.message);
+    } catch (err) {
+      alert("Error al guardar el documento: " + err.message);
     }
   };
 
-  // 12. Abrir visor completo y re-edición de un documento
-  const handleOpenDocViewer = (doc) => {
-    setDocPages(doc.pages || []);
-    setDocTitle(doc.title || 'Documento');
-    setEditingDocId(doc.id);
-    setEditingPageIndex(null);
-    setCurrentView(VIEW_STATES.DOCUMENT);
+  // 12. Abrir visor desde la biblioteca de inicio
+  const handleOpenDocViewer = async (docRecord) => {
+    try {
+      const fullDoc = await getDocumentById(docRecord.id);
+      if (fullDoc && fullDoc.pages && fullDoc.pages.length > 0) {
+        setEditingDocId(fullDoc.id);
+        setEditingPageIndex(null);
+        setDocPages(fullDoc.pages);
+        setDocTitle(fullDoc.title || createNewDocTitle());
+        setCurrentView(VIEW_STATES.DOCUMENT);
+      } else {
+        alert("El documento no contiene páginas válidas.");
+      }
+    } catch (e) {
+      alert("Error al abrir el documento: " + e.message);
+    }
   };
 
-  // 13. Eliminar un documento de la biblioteca
-  const handleDeleteSavedDoc = async (id) => {
+  // 13. Eliminar documento guardado
+  const handleDeleteSavedDoc = async (docId) => {
     try {
-      await deleteDocument(id);
+      await deleteDocument(docId);
       await loadSavedDocuments();
+      if (editingDocId === docId) {
+        setEditingDocId(null);
+        setDocPages([]);
+        setCurrentView(VIEW_STATES.HOME);
+      }
     } catch (e) {
       alert("Error eliminando documento: " + e.message);
     }
   };
 
-  // 14. Renombrar un documento de la biblioteca
-  const handleRenameSavedDoc = async (id, newTitle) => {
+  // 14. Renombrar documento guardado desde la biblioteca
+  const handleRenameSavedDoc = async (docId, newTitle) => {
     try {
-      await renameDocument(id, newTitle);
+      await renameDocument(docId, newTitle);
       await loadSavedDocuments();
+      if (editingDocId === docId) {
+        setDocTitle(newTitle);
+      }
     } catch (e) {
       alert("Error renombrando documento: " + e.message);
     }
@@ -310,8 +331,6 @@ export default function App() {
   return (
     <div className="app-layout">
       <Header
-        driveStatus={driveStatus}
-        onOpenDriveModal={() => setIsDriveModalOpen(true)}
         onOpenChangelog={() => setIsChangelogOpen(true)}
         onHomeClick={() => {
           setEditingDocId(null);
@@ -337,6 +356,7 @@ export default function App() {
               setDocTitle(createNewDocTitle());
               handleImageReady(blob);
             }}
+            onOpenPortraitStudio={() => setCurrentView(VIEW_STATES.PORTRAIT_STUDIO)}
             currentDocPages={docPages}
             onViewCurrentDoc={() => setCurrentView(VIEW_STATES.DOCUMENT)}
             onLoadDemoDocument={handleLoadDemo}
@@ -345,6 +365,10 @@ export default function App() {
             onDeleteDoc={handleDeleteSavedDoc}
             onRenameDoc={handleRenameSavedDoc}
           />
+        )}
+
+        {currentView === VIEW_STATES.PORTRAIT_STUDIO && (
+          <PortraitStudio onBack={() => setCurrentView(VIEW_STATES.HOME)} />
         )}
 
         {currentView === VIEW_STATES.CAMERA && (
@@ -396,8 +420,6 @@ export default function App() {
               setCurrentView(VIEW_STATES.HOME);
             }}
             onFinishAndSave={handleFinishAndSave}
-            driveStatus={driveStatus}
-            onOpenDriveModal={() => setIsDriveModalOpen(true)}
           />
         )}
 
@@ -416,20 +438,11 @@ export default function App() {
               setDocTitle(createNewDocTitle());
               handleStartCamera();
             }}
-            driveStatus={driveStatus}
-            onOpenDriveModal={() => setIsDriveModalOpen(true)}
             onDocUpdated={loadSavedDocuments}
             onViewFullDoc={handleOpenDocViewer}
           />
         )}
       </main>
-
-      <GDriveModal
-        isOpen={isDriveModalOpen}
-        onClose={() => setIsDriveModalOpen(false)}
-        driveStatus={driveStatus}
-        onStatusRefresh={refreshDriveStatus}
-      />
 
       <ChangelogModal
         isOpen={isChangelogOpen}

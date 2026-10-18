@@ -2367,3 +2367,414 @@ body {
   color: var(--text-muted);
   line-height: 1.4;
 }
+
+/* ==========================================================================
+   6. Barra de Carga y Progreso entre Procesos (ProgressBar)
+   ========================================================================== */
+.processing-progress-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 15, 23, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.processing-progress-card {
+  width: 100%;
+  max-width: 360px;
+  background: #171d26;
+  border: 1px solid #283344;
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.progress-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.progress-percentage-label {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--accent-emerald);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: #252f40;
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+  border-radius: 9999px;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-status-text {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   7. Rediseño Profesional de HomeScreen (Sin AI Clichés ni Fluff)
+   ========================================================================== */
+.tools-selection-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home-section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.home-section-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tools-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tool-main-card {
+  background: #141a24;
+  border: 1px solid #232c3d;
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 0.2s ease, transform 0.15s ease;
+}
+
+.tool-main-card:active {
+  transform: scale(0.99);
+}
+
+.portrait-tool-card {
+  border-color: rgba(168, 85, 247, 0.25);
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.04) 0%, #141a24 100%);
+  cursor: pointer;
+}
+
+.portrait-tool-card:hover {
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.tool-card-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.tool-badge-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-badge-icon.doc-tool {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.tool-badge-icon.portrait-tool {
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+.tool-texts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.tool-desc {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.badge-new-tool {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #a855f7;
+  color: #fff;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tool-card-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-tool-action {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.btn-tool-action.primary {
+  background: var(--accent-emerald);
+  color: #0b0f17;
+}
+
+.btn-tool-action.primary:active {
+  background: var(--accent-emerald-hover);
+}
+
+.btn-tool-action.secondary {
+  background: #1e2636;
+  border: 1px solid #2d384d;
+  color: #f1f5f9;
+}
+
+.btn-tool-action.purple-action {
+  background: #8b5cf6;
+  color: #fff;
+}
+
+.btn-tool-action.purple-action:hover {
+  background: #7c3aed;
+}
+
+.demo-doc-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   8. Estudio de Foto Carnet & Retrato (PortraitStudio)
+   ========================================================================== */
+.portrait-studio-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #0b0f17;
+}
+
+.studio-header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
+}
+
+.studio-header-titles {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.studio-subtitle {
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.studio-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.studio-empty-icon-box {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.studio-empty-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: 8px;
+}
+
+.studio-empty-desc {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  max-width: 320px;
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+
+.studio-launch-buttons {
+  width: 100%;
+  max-width: 300px;
+}
+
+.studio-editor-viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-view-tabs {
+  display: flex;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 12px;
+  gap: 8px;
+}
+
+.studio-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.studio-tab-btn.active {
+  background: #1c2433;
+  border-color: #2c384e;
+  color: #f8fafc;
+}
+
+.studio-image-stage {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #06090e;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.studio-preview-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 55vh;
+}
+
+.studio-rendered-img {
+  max-width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+
+.studio-rendered-img.photo-carnet-ratio {
+  aspect-ratio: 3 / 4;
+}
+
+.studio-rendered-img.sheet-ratio {
+  aspect-ratio: 3 / 2;
+}
+
+.studio-panel {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.studio-bottom-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.studio-bottom-actions button {
+  flex: 1;
+}
