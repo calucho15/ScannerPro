@@ -1,7 +1,7 @@
 import React from 'react';
-import { Scan, Cloud, CloudOff, ShieldCheck } from 'lucide-react';
+import { Scan, Cloud, CloudOff, Sparkles } from 'lucide-react';
 
-export default function Header({ driveStatus, onOpenDriveModal, onHomeClick }) {
+export default function Header({ driveStatus, onOpenDriveModal, onHomeClick, onOpenChangelog }) {
   return (
     <header className="app-header">
       <div className="header-brand" onClick={onHomeClick} role="button" tabIndex={0}>
@@ -9,7 +9,21 @@ export default function Header({ driveStatus, onOpenDriveModal, onHomeClick }) {
           <Scan className="w-6 h-6 text-emerald-400" />
         </div>
         <div>
-          <h1 className="header-title">ScannerPro</h1>
+          <div className="header-title-row">
+            <h1 className="header-title">ScannerPro</h1>
+            <button
+              type="button"
+              className="version-pill-header"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenChangelog) onOpenChangelog();
+              }}
+              title="Toca para ver novedades de la versión v1.1.0"
+            >
+              <Sparkles className="w-3 h-3 text-emerald-400 mr-1" />
+              <span>v1.1.0</span>
+            </button>
+          </div>
           <span className="header-subtitle">Libre de publicidad • Sin marcas de agua</span>
         </div>
       </div>

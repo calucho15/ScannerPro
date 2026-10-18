@@ -1,37 +1,45 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Check, Maximize2, Sparkles, ArrowLeft, Loader2 } from 'lucide-react';
-import { detectCorners } from '../services/api';
+import { Check, Maximize2, Sparkles, ArrowLeft, Loader2, Grid, RotateCw } from 'lucide-react';
+import { detectCorners, rotateImage } from '../services/api';
 
 export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   const containerRef = useRef(null);
   const imageRef = useRef(null);
+  const loupeCanvasRef = useRef(null);
+
+  const [activeBlob, setActiveBlob] = useState(imageBlob);
   const [imageSrc, setImageSrc] = useState(null);
   const [imgNaturalSize, setImgNaturalSize] = useState({ width: 0, height: 0 });
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
-  const [corners, setCorners] = useState(null); // [[x,y], [x,y], [x,y], [x,y]] en coordenadas nativas de la imagen
+  const [corners, setCorners] = useState(null); // [[x,y], [x,y], [x,y], [x,y]] en coordenadas nativas
   const [activeCornerIdx, setActiveCornerIdx] = useState(null);
   const [loadingDetection, setLoadingDetection] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [isRotating, setIsRotating] = useState(false);
 
   useEffect(() => {
-    if (!imageBlob) return;
+    setActiveBlob(imageBlob);
+  }, [imageBlob]);
+
+  useEffect(() => {
+    if (!activeBlob) return;
 
     let url = null;
-    if (typeof imageBlob === 'string') {
-      setImageSrc(imageBlob);
-    } else if (imageBlob instanceof Blob) {
-      url = URL.createObjectURL(imageBlob);
+    if (typeof activeBlob === 'string') {
+      setImageSrc(activeBlob);
+    } else if (activeBlob instanceof Blob) {
+      url = URL.createObjectURL(activeBlob);
       setImageSrc(url);
     }
 
     return () => {
-      // Retrasar revocación para que React 18 StrictMode o re-renders rápidos no anulen la URL
       if (url) {
         setTimeout(() => {
           try { URL.revokeObjectURL(url); } catch (e) {}
         }, 15000);
       }
     };
-  }, [imageBlob]);
+  }, [activeBlob]);
 
   const setDefaultCorners = (w, h) => {
     const validW = w || 800;
@@ -58,24 +66,24 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
       setDisplaySize({ width: rect.width, height: rect.height });
     }
 
-    // 1. Inmediatamente hacer visibles los 4 puntos y la imagen
+    // 1. Mostrar de inmediato margen inteligente por defecto
     setDefaultCorners(nw, nh);
 
-    // 2. Intentar afinar bordes en segundo plano
+    // 2. Intentar afinar bordes con análisis de gradiente
     setLoadingDetection(true);
     try {
-      const data = await detectCorners(imageBlob);
+      const data = await detectCorners(activeBlob);
       if (data && data.corners && data.corners.length === 4) {
         setCorners(data.corners);
       }
     } catch (err) {
-      console.warn("Detección de bordes omitida, usando márgenes por defecto:", err);
+      console.warn("Detección de bordes omitida:", err);
     } finally {
       setLoadingDetection(false);
     }
   };
 
-  // Mantener las dimensiones de pantalla actualizadas ante redimensiones o rotación
+  // Mantener las dimensiones de pantalla sincronizadas
   useEffect(() => {
     if (!imageRef.current) return;
 
@@ -104,10 +112,55 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     };
   }, [imageSrc, imgNaturalSize.width]);
 
+  // Actualizar contenido de la Lupa de Precisión en tiempo real
+  useEffect(() => {
+    if (activeCornerIdx === null || !corners || !imageRef.current || !loupeCanvasRef.current) return;
+    const canvas = loupeCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const [nx, ny] = corners[activeCornerIdx];
+    const zoom = 2.5;
+    const size = 110;
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+
+    // Dibujar imagen ampliada centrada en la esquina
+    const srcSize = size / zoom;
+    ctx.drawImage(
+      imageRef.current,
+      nx - srcSize / 2,
+      ny - srcSize / 2,
+      srcSize,
+      srcSize,
+      0,
+      0,
+      size,
+      size
+    );
+
+    // Dibujar cruz de mira de precisión
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(size / 2 - 12, size / 2);
+    ctx.lineTo(size / 2 + 12, size / 2);
+    ctx.moveTo(size / 2, size / 2 - 12);
+    ctx.lineTo(size / 2, size / 2 + 12);
+    ctx.stroke();
+
+    ctx.restore();
+  }, [activeCornerIdx, corners]);
+
   const handleAutoDetect = async () => {
     setLoadingDetection(true);
     try {
-      const data = await detectCorners(imageBlob);
+      const data = await detectCorners(activeBlob);
       if (data && data.corners && data.corners.length === 4) {
         setCorners(data.corners);
       }
@@ -129,7 +182,20 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     ]);
   };
 
-  // Convertir coordenadas nativas a coordenadas de pantalla (display)
+  const handleRotate = async () => {
+    if (isRotating) return;
+    setIsRotating(true);
+    try {
+      const rotated = await rotateImage(activeBlob, 90);
+      setActiveBlob(rotated);
+      setCorners(null);
+    } catch (err) {
+      alert("Error al rotar imagen: " + err.message);
+    } finally {
+      setIsRotating(false);
+    }
+  };
+
   const getDisplayCoords = (pt) => {
     const w = displaySize.width || (imageRef.current ? imageRef.current.clientWidth : 0);
     const h = displaySize.height || (imageRef.current ? imageRef.current.clientHeight : 0);
@@ -145,7 +211,6 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     };
   };
 
-  // Convertir coordenadas de evento de pantalla a nativas
   const getNativeCoords = (clientX, clientY) => {
     if (!imageRef.current || !imgNaturalSize.width) return [0, 0];
     const rect = imageRef.current.getBoundingClientRect();
@@ -193,12 +258,25 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
 
   const handleConfirm = () => {
     if (!corners) return;
-    onApplyCrop(corners);
+    onApplyCrop(corners, activeBlob);
   };
 
-  // Generar path poligonal para el SVG
   const displayCorners = corners ? corners.map(getDisplayCoords) : [];
   const polygonPoints = displayCorners.map((p) => `${p.x},${p.y}`).join(' ');
+
+  // Interpolación bilineal para líneas de cuadrícula 3x3
+  const interpolateDisplay = (u, v) => {
+    if (displayCorners.length < 4) return { x: 0, y: 0 };
+    const [tl, tr, br, bl] = displayCorners;
+    const topX = tl.x + u * (tr.x - tl.x);
+    const topY = tl.y + u * (tr.y - tl.y);
+    const botX = bl.x + u * (br.x - bl.x);
+    const botY = bl.y + u * (br.y - bl.y);
+    return {
+      x: topX + v * (botX - topX),
+      y: topY + v * (botY - topY)
+    };
+  };
 
   return (
     <div
@@ -214,7 +292,7 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
         <button
           className="btn-confirm-crop"
           onClick={handleConfirm}
-          disabled={!corners}
+          disabled={!corners || isRotating}
           title="Enderezar"
         >
           <Check className="w-5 h-5 mr-1" />
@@ -234,7 +312,7 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
               draggable={false}
             />
 
-            {/* Capa SVG con máscara de recorte y líneas */}
+            {/* Capa SVG con máscara de recorte y cuadrícula */}
             {corners && imageRef.current && displayCorners.length === 4 && (
               <svg className="crop-svg-overlay">
                 <defs>
@@ -259,23 +337,47 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
                   strokeDasharray="4 2"
                 />
 
-                {/* Líneas guía cruzadas */}
-                <line
-                  x1={(displayCorners[0].x + displayCorners[3].x) / 2}
-                  y1={(displayCorners[0].y + displayCorners[3].y) / 2}
-                  x2={(displayCorners[1].x + displayCorners[2].x) / 2}
-                  y2={(displayCorners[1].y + displayCorners[2].y) / 2}
-                  stroke="rgba(16, 185, 129, 0.4)"
-                  strokeWidth="1"
-                />
-                <line
-                  x1={(displayCorners[0].x + displayCorners[1].x) / 2}
-                  y1={(displayCorners[0].y + displayCorners[1].y) / 2}
-                  x2={(displayCorners[3].x + displayCorners[2].x) / 2}
-                  y2={(displayCorners[3].y + displayCorners[2].y) / 2}
-                  stroke="rgba(16, 185, 129, 0.4)"
-                  strokeWidth="1"
-                />
+                {/* Cuadrícula 3x3 de alineación perspectiva */}
+                {showGrid && (
+                  <>
+                    <line
+                      x1={interpolateDisplay(0, 0.33).x}
+                      y1={interpolateDisplay(0, 0.33).y}
+                      x2={interpolateDisplay(1, 0.33).x}
+                      y2={interpolateDisplay(1, 0.33).y}
+                      stroke="rgba(16, 185, 129, 0.45)"
+                      strokeWidth="1.2"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1={interpolateDisplay(0, 0.67).x}
+                      y1={interpolateDisplay(0, 0.67).y}
+                      x2={interpolateDisplay(1, 0.67).x}
+                      y2={interpolateDisplay(1, 0.67).y}
+                      stroke="rgba(16, 185, 129, 0.45)"
+                      strokeWidth="1.2"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1={interpolateDisplay(0.33, 0).x}
+                      y1={interpolateDisplay(0.33, 0).y}
+                      x2={interpolateDisplay(0.33, 1).x}
+                      y2={interpolateDisplay(0.33, 1).y}
+                      stroke="rgba(16, 185, 129, 0.45)"
+                      strokeWidth="1.2"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1={interpolateDisplay(0.67, 0).x}
+                      y1={interpolateDisplay(0.67, 0).y}
+                      x2={interpolateDisplay(0.67, 1).x}
+                      y2={interpolateDisplay(0.67, 1).y}
+                      stroke="rgba(16, 185, 129, 0.45)"
+                      strokeWidth="1.2"
+                      strokeDasharray="3 3"
+                    />
+                  </>
+                )}
               </svg>
             )}
 
@@ -293,13 +395,27 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
                 <div className="handle-dot" />
               </div>
             ))}
+
+            {/* Lupa Flotante de Precisión (2.5x zoom con cruz de mira) */}
+            {activeCornerIdx !== null && corners && displayCorners[activeCornerIdx] && (
+              <div
+                className="crop-magnifier-loupe"
+                style={{
+                  left: `${Math.max(60, Math.min(displaySize.width - 60, displayCorners[activeCornerIdx].x))}px`,
+                  top: `${displayCorners[activeCornerIdx].y < 95 ? displayCorners[activeCornerIdx].y + 75 : displayCorners[activeCornerIdx].y - 75}px`
+                }}
+              >
+                <canvas ref={loupeCanvasRef} width={110} height={110} className="loupe-canvas" />
+                <div className="loupe-ring" />
+              </div>
+            )}
           </div>
         )}
 
-        {loadingDetection && (
+        {(loadingDetection || isRotating) && (
           <div className="detection-spinner-overlay">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-            <span>Optimizando bordes...</span>
+            <span>{isRotating ? 'Rotando imagen...' : 'Optimizando bordes...'}</span>
           </div>
         )}
       </div>
@@ -308,6 +424,16 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
         <button className="toolbar-tool-btn" onClick={handleAutoDetect}>
           <Sparkles className="w-5 h-5 text-emerald-400" />
           <span>Auto-detectar</span>
+        </button>
+
+        <button className="toolbar-tool-btn" onClick={() => setShowGrid(!showGrid)}>
+          <Grid className={`w-5 h-5 ${showGrid ? 'text-emerald-400' : 'text-gray-400'}`} />
+          <span>{showGrid ? 'Guías ON' : 'Guías OFF'}</span>
+        </button>
+
+        <button className="toolbar-tool-btn" onClick={handleRotate} disabled={isRotating}>
+          <RotateCw className="w-5 h-5 text-cyan-400" />
+          <span>Rotar 90°</span>
         </button>
 
         <button className="toolbar-tool-btn" onClick={handleSelectAll}>

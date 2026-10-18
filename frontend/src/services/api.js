@@ -8,7 +8,8 @@ import {
   warpPerspectiveLocal,
   applyFilterLocal,
   generatePdfLocal,
-  detectCornersLocal
+  detectCornersLocal,
+  rotateImageBlob
 } from './localProcessor';
 import { Capacitor } from '@capacitor/core';
 
@@ -91,11 +92,18 @@ export async function warpPerspective(imageBlob, corners = null) {
 }
 
 /**
+ * Rota una imagen 90 grados
+ */
+export async function rotateImage(imageBlob, degrees = 90) {
+  return await rotateImageBlob(imageBlob, degrees);
+}
+
+/**
  * Aplica filtro de ruido/realce (Backend o Local)
  */
-export async function applyImageFilter(imageBlob, filterType = 'magic_color') {
+export async function applyImageFilter(imageBlob, filterType = 'magic_color', options = {}) {
   if (Capacitor.isNativePlatform()) {
-    return await applyFilterLocal(imageBlob, filterType);
+    return await applyFilterLocal(imageBlob, filterType, options);
   }
 
   try {
@@ -118,15 +126,15 @@ export async function applyImageFilter(imageBlob, filterType = 'magic_color') {
   }
 
   // Respaldo local en el dispositivo
-  return await applyFilterLocal(imageBlob, filterType);
+  return await applyFilterLocal(imageBlob, filterType, options);
 }
 
 /**
- * Genera PDF multipágina (Backend o Local)
+ * Genera PDF multipágina (Backend o Local) con soporte de presets de calidad
  */
-export async function generatePdf(imageBlobs, fitToA4 = true, quality = 88) {
+export async function generatePdf(imageBlobs, fitToA4 = true, qualityPreset = 'standard') {
   if (Capacitor.isNativePlatform()) {
-    return await generatePdfLocal(imageBlobs, fitToA4);
+    return await generatePdfLocal(imageBlobs, fitToA4, qualityPreset);
   }
 
   try {
@@ -135,7 +143,7 @@ export async function generatePdf(imageBlobs, fitToA4 = true, quality = 88) {
       formData.append('files', blob, `page_${idx + 1}.jpg`);
     });
     formData.append('fit_to_a4', fitToA4);
-    formData.append('quality', quality);
+    formData.append('quality', qualityPreset === 'lightweight' ? 70 : (qualityPreset === 'hd' ? 95 : 85));
 
     const res = await fetch(`${API_BASE}/process/create-pdf`, {
       method: 'POST',
@@ -152,7 +160,7 @@ export async function generatePdf(imageBlobs, fitToA4 = true, quality = 88) {
   }
 
   // Respaldo local en el dispositivo
-  return await generatePdfLocal(imageBlobs, fitToA4);
+  return await generatePdfLocal(imageBlobs, fitToA4, qualityPreset);
 }
 
 /**

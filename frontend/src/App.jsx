@@ -7,6 +7,7 @@ import FilterScreen from './components/FilterScreen';
 import DocumentViewer from './components/DocumentViewer';
 import ShareCompleteScreen from './components/ShareCompleteScreen';
 import GDriveModal from './components/GDriveModal';
+import ChangelogModal from './components/ChangelogModal';
 import { getDriveStatus, warpPerspective } from './services/api';
 import { generateDemoDocumentBlob } from './services/demoDoc';
 import {
@@ -34,6 +35,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState(VIEW_STATES.HOME);
   const [driveStatus, setDriveStatus] = useState(null);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   // Biblioteca de documentos guardados en IndexedDB
   const [savedDocs, setSavedDocs] = useState([]);
@@ -208,6 +210,21 @@ export default function App() {
     }
   };
 
+  // 7.1 Actualizar una página rotada o procesada
+  const handleUpdatePage = async (pageIndex, newPageBlob) => {
+    const updated = [...docPages];
+    updated[pageIndex] = newPageBlob;
+    setDocPages(updated);
+    if (editingDocId) {
+      try {
+        await updateDocument(editingDocId, { pages: updated });
+        await loadSavedDocuments();
+      } catch (e) {
+        console.warn("Error actualizando página en storage:", e);
+      }
+    }
+  };
+
   // 8. Re-editar recorte de una página
   const handleEditPageCrop = (pageIdx, pageBlob) => {
     setEditingPageIndex(pageIdx);
@@ -295,6 +312,7 @@ export default function App() {
       <Header
         driveStatus={driveStatus}
         onOpenDriveModal={() => setIsDriveModalOpen(true)}
+        onOpenChangelog={() => setIsChangelogOpen(true)}
         onHomeClick={() => {
           setEditingDocId(null);
           setEditingPageIndex(null);
@@ -369,6 +387,7 @@ export default function App() {
               handleStartCamera();
             }}
             onDeletePage={handleDeletePage}
+            onUpdatePage={handleUpdatePage}
             onEditPageCrop={handleEditPageCrop}
             onEditPageFilter={handleEditPageFilter}
             onBackToHome={() => {
@@ -410,6 +429,11 @@ export default function App() {
         onClose={() => setIsDriveModalOpen(false)}
         driveStatus={driveStatus}
         onStatusRefresh={refreshDriveStatus}
+      />
+
+      <ChangelogModal
+        isOpen={isChangelogOpen}
+        onClose={() => setIsChangelogOpen(false)}
       />
     </div>
   );

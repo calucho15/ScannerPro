@@ -14,14 +14,17 @@ import {
   ArrowLeft,
   Check,
   MessageCircle,
-  Edit2,
   Crop,
   Image as ImageIcon,
   Maximize2,
   X,
-  Sparkles
+  Sparkles,
+  RotateCw,
+  Sliders,
+  Zap,
+  Printer
 } from 'lucide-react';
-import { generatePdf, uploadToDrive } from '../services/api';
+import { generatePdf, uploadToDrive, rotateImage } from '../services/api';
 import { shareFileNative, downloadFileLocal } from '../services/shareService';
 
 export default function DocumentViewer({
@@ -30,6 +33,7 @@ export default function DocumentViewer({
   onTitleChange,
   onAddPage,
   onDeletePage,
+  onUpdatePage,
   onEditPageCrop,
   onEditPageFilter,
   onBackToHome,
@@ -41,10 +45,11 @@ export default function DocumentViewer({
   const [pageUrls, setPageUrls] = useState([]);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isUploadingDrive, setIsUploadingDrive] = useState(false);
+  const [isRotatingPage, setIsRotatingPage] = useState(false);
   const [driveResult, setDriveResult] = useState(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [showEditMenu, setShowEditMenu] = useState(false);
   const [showSaveMenu, setShowSaveMenu] = useState(false);
+  const [pdfQualityPreset, setPdfQualityPreset] = useState('standard'); // 'lightweight' | 'standard' | 'hd'
 
   useEffect(() => {
     // Generar URLs para previsualizar cada página
@@ -68,8 +73,24 @@ export default function DocumentViewer({
     };
   }, [pages]);
 
-  const getCompiledPdfBlob = async () => {
-    return await generatePdf(pages, true, 88);
+  const getCompiledPdfBlob = async (preset = pdfQualityPreset) => {
+    return await generatePdf(pages, true, preset);
+  };
+
+  // Rotar página actual 90°
+  const handleRotateCurrentPage = async () => {
+    if (isRotatingPage || !pages[currentPageIdx]) return;
+    setIsRotatingPage(true);
+    try {
+      const rotated = await rotateImage(pages[currentPageIdx], 90);
+      if (onUpdatePage) {
+        onUpdatePage(currentPageIdx, rotated);
+      }
+    } catch (err) {
+      alert("Error al rotar página: " + err.message);
+    } finally {
+      setIsRotatingPage(false);
+    }
   };
 
   // Compartir PDF directamente a WhatsApp, Telegram, etc.
@@ -77,7 +98,7 @@ export default function DocumentViewer({
     if (pages.length === 0) return;
     setIsGeneratingPdf(true);
     try {
-      const pdfBlob = await getCompiledPdfBlob();
+      const pdfBlob = await getCompiledPdfBlob(pdfQualityPreset);
       const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
       await shareFileNative(pdfBlob, fileName, docTitle);
     } catch (err) {
@@ -105,7 +126,7 @@ export default function DocumentViewer({
     setIsGeneratingPdf(true);
     setShowSaveMenu(false);
     try {
-      const pdfBlob = await getCompiledPdfBlob();
+      const pdfBlob = await getCompiledPdfBlob(pdfQualityPreset);
       const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
       await downloadFileLocal(pdfBlob, fileName);
     } catch (err) {
@@ -132,7 +153,7 @@ export default function DocumentViewer({
     if (pages.length === 0) return;
     setIsGeneratingPdf(true);
     try {
-      const pdfBlob = await getCompiledPdfBlob();
+      const pdfBlob = await getCompiledPdfBlob(pdfQualityPreset);
       onFinishAndSave({
         title: docTitle.trim() || 'Documento_Escaneado',
         pages,
@@ -155,7 +176,7 @@ export default function DocumentViewer({
     setIsUploadingDrive(true);
     setDriveResult(null);
     try {
-      const pdfBlob = await getCompiledPdfBlob();
+      const pdfBlob = await getCompiledPdfBlob(pdfQualityPreset);
       const fileName = `${docTitle.trim() || 'Documento_Escaneado'}.pdf`;
       const result = await uploadToDrive(pdfBlob, fileName, 'Mi CamScanner');
       setDriveResult(result);
@@ -209,6 +230,36 @@ export default function DocumentViewer({
         </button>
       </div>
 
+      {/* Selector de Calidad de PDF */}
+      <div className="pdf-quality-bar">
+        <span className="pdf-quality-label">Calidad PDF:</span>
+        <div className="pdf-quality-pills">
+          <button
+            className={`quality-pill ${pdfQualityPreset === 'lightweight' ? 'active' : ''}`}
+            onClick={() => setPdfQualityPreset('lightweight')}
+            title="Optimizado para WhatsApp y datos móviles (~250 KB)"
+          >
+            <Zap className="w-3 h-3 mr-1 text-amber-400" />
+            <span>Ligero WhatsApp</span>
+          </button>
+          <button
+            className={`quality-pill ${pdfQualityPreset === 'standard' ? 'active' : ''}`}
+            onClick={() => setPdfQualityPreset('standard')}
+            title="Equilibrio ideal nitidez/peso (~800 KB)"
+          >
+            <span>Estándar HD</span>
+          </button>
+          <button
+            className={`quality-pill ${pdfQualityPreset === 'hd' ? 'active' : ''}`}
+            onClick={() => setPdfQualityPreset('hd')}
+            title="Máxima nitidez para impresión formal"
+          >
+            <Printer className="w-3 h-3 mr-1 text-cyan-400" />
+            <span>Máxima Nitidez</span>
+          </button>
+        </div>
+      </div>
+
       {/* Visor central de la página actual */}
       <div className="doc-page-main-container">
         {pageUrls[currentPageIdx] && (
@@ -254,14 +305,14 @@ export default function DocumentViewer({
         )}
       </div>
 
-      {/* Barra de Edición de Página: Re-recortar o Cambiar Filtros */}
+      {/* Barra de Edición de Página: Re-recortar, Cambiar Filtros o Rotar */}
       <div className="page-edit-toolbar">
         <button
           className="btn-edit-page-action"
           onClick={() => onEditPageCrop(currentPageIdx, pages[currentPageIdx])}
         >
           <Crop className="w-4 h-4 mr-1.5 text-emerald-400" />
-          <span>Re-ajustar Recorte</span>
+          <span>Re-ajustar</span>
         </button>
 
         <button
@@ -269,7 +320,20 @@ export default function DocumentViewer({
           onClick={() => onEditPageFilter(currentPageIdx, pages[currentPageIdx])}
         >
           <Sparkles className="w-4 h-4 mr-1.5 text-cyan-400" />
-          <span>Cambiar Filtro</span>
+          <span>Filtro</span>
+        </button>
+
+        <button
+          className="btn-edit-page-action"
+          onClick={handleRotateCurrentPage}
+          disabled={isRotatingPage}
+        >
+          {isRotatingPage ? (
+            <Loader2 className="w-4 h-4 mr-1.5 animate-spin text-amber-400" />
+          ) : (
+            <RotateCw className="w-4 h-4 mr-1.5 text-amber-400" />
+          )}
+          <span>Rotar 90°</span>
         </button>
 
         {pages.length > 1 && (
@@ -365,7 +429,7 @@ export default function DocumentViewer({
             <div className="save-options-dropdown">
               <button onClick={handleDownloadPdf}>
                 <FileText className="w-4 h-4 mr-2 text-emerald-400" />
-                Guardar como PDF
+                Guardar como PDF ({pdfQualityPreset.toUpperCase()})
               </button>
               <button onClick={handleDownloadImage}>
                 <ImageIcon className="w-4 h-4 mr-2 text-cyan-400" />
