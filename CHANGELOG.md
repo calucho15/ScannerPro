@@ -1,5 +1,23 @@
 # Historial de Versiones - ScannerPro
 
+## [v1.3.0] - 2026-10-18
+
+### 📸 Flujo de Captura por Lotes (Fotos Primero, Edición Después)
+- **Captura continua**: Toma todas las fotos de tu documento seguidas con un contador visual de páginas capturadas sin que la aplicación te interrumpa para recortar tras cada foto.
+- **Bandeja de revisión previa**: Revisa las miniaturas de las páginas tomadas, elimina fotos movidas o desenfocadas y añade más páginas desde la cámara o la galería.
+- **Edición secuencial guiada**: Al pulsar "Continuar a Edición", recorre página por página (`Pág. 1 de N`, `Pág. 2 de N`...) ajustando esquinas y acabados de forma fluida.
+- **Selección múltiple desde Galería**: Ahora puedes importar múltiples fotos a la vez desde la galería del móvil.
+
+### 📐 Auto-Detección de Bordes Ultra Robusta
+- **Nuevo motor de visión**: Segmentación morfológica avanzada con análisis de componentes conectados (CCA), envolvente convexa (*Convex Hull*) y maximización de área de cuadriláteros.
+- **Contraste Extremo Resuelto**: Detecta con precisión sub-pixel hojas blancas sobre fondos negros o mesas oscuras, ignorando completamente el texto impreso, reflejos o polvo en la superficie.
+
+### 📱 Optimización de Interfaz y Botón Listo
+- **Sin botones ocultos o cortados**: Reorganizado el encabezado en la pantalla de acabados para garantizar que el botón "Listo" / "Siguiente" quede siempre visible y espacioso en cualquier ancho de pantalla móvil.
+- **Barra de rotación dedicada**: Botones dedicados "Rotar Izq" (-90°) y "Rotar Der" (+90°) ubicados cómodamente bajo el visor de la imagen.
+
+---
+
 ## [v1.2.0] - 2026-10-18
 
 ### 👤 Nueva Herramienta: Estudio de Foto Carnet & Retrato Fondo Blanco

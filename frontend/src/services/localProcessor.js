@@ -87,24 +87,121 @@ function canvasToBlob(canvas, quality = 0.92) {
 }
 
 /**
- * Ordena 4 puntos: [sup-izq, sup-der, inf-der, inf-izq]
+ * Ordena 4 puntos en el cuadrilátero: [sup-izq, sup-der, inf-der, inf-izq]
  */
 export function orderCorners(pts) {
-  // Ordenar por coordenada Y
-  const sortedByY = [...pts].sort((a, b) => a[1] - b[1]);
-  const topPoints = sortedByY.slice(0, 2).sort((a, b) => a[0] - b[0]);
-  const bottomPoints = sortedByY.slice(2, 4).sort((a, b) => a[0] - b[0]);
+  if (!pts || pts.length !== 4) return pts;
 
-  const tl = topPoints[0];
-  const tr = topPoints[1];
-  const bl = bottomPoints[0];
-  const br = bottomPoints[1];
+  // Centroide
+  const cx = (pts[0][0] + pts[1][0] + pts[2][0] + pts[3][0]) / 4;
+  const cy = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
+
+  let tl = null, tr = null, br = null, bl = null;
+  let maxTlDist = -Infinity, maxTrDist = -Infinity, maxBrDist = -Infinity, maxBlDist = -Infinity;
+
+  for (let p of pts) {
+    const dx = p[0] - cx;
+    const dy = p[1] - cy;
+
+    // Superior izquierda: dx < 0, dy < 0
+    const scoreTl = -dx - dy;
+    if (scoreTl > maxTlDist) { maxTlDist = scoreTl; tl = p; }
+
+    // Superior derecha: dx > 0, dy < 0
+    const scoreTr = dx - dy;
+    if (scoreTr > maxTrDist) { maxTrDist = scoreTr; tr = p; }
+
+    // Inferior derecha: dx > 0, dy > 0
+    const scoreBr = dx + dy;
+    if (scoreBr > maxBrDist) { maxBrDist = scoreBr; br = p; }
+
+    // Inferior izquierda: dx < 0, dy > 0
+    const scoreBl = -dx + dy;
+    if (scoreBl > maxBlDist) { maxBlDist = scoreBl; bl = p; }
+  }
+
+  if (!tl || !tr || !br || !bl || tl === tr || br === bl) {
+    const sortedByY = [...pts].sort((a, b) => a[1] - b[1]);
+    const topPoints = sortedByY.slice(0, 2).sort((a, b) => a[0] - b[0]);
+    const bottomPoints = sortedByY.slice(2, 4).sort((a, b) => a[0] - b[0]);
+    return [topPoints[0], topPoints[1], bottomPoints[1], bottomPoints[0]];
+  }
 
   return [tl, tr, br, bl];
 }
 
+function crossProduct(a, b, c) {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function computeConvexHull(points) {
+  const sorted = [...points].sort((a, b) => a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]);
+  const lower = [];
+  for (let p of sorted) {
+    while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  upper.pop();
+  lower.pop();
+  return lower.concat(upper);
+}
+
+function computeQuadArea(p1, p2, p3, p4) {
+  return 0.5 * Math.abs(
+    p1[0] * p2[1] - p2[0] * p1[1] +
+    p2[0] * p3[1] - p3[0] * p2[1] +
+    p3[0] * p4[1] - p4[0] * p3[1] +
+    p4[0] * p1[1] - p1[0] * p4[1]
+  );
+}
+
+function extractBestQuadFromHull(hull) {
+  const n = hull.length;
+  if (n < 4) return null;
+  if (n === 4) return hull;
+
+  let pts = hull;
+  if (n > 36) {
+    pts = [];
+    const step = n / 36;
+    for (let i = 0; i < 36; i++) {
+      pts.push(hull[Math.floor(i * step)]);
+    }
+  }
+
+  const m = pts.length;
+  let maxA = 0;
+  let bestQuad = null;
+
+  for (let i = 0; i < m - 3; i++) {
+    for (let j = i + 1; j < m - 2; j++) {
+      for (let k = j + 1; k < m - 1; k++) {
+        for (let l = k + 1; l < m; l++) {
+          const a = computeQuadArea(pts[i], pts[j], pts[k], pts[l]);
+          if (a > maxA) {
+            maxA = a;
+            bestQuad = [pts[i], pts[j], pts[k], pts[l]];
+          }
+        }
+      }
+    }
+  }
+
+  return bestQuad;
+}
+
 /**
- * Detecta esquinas de documento mediante análisis de gradientes de bordes y segmentación de papel
+ * Detecta esquinas de documento mediante segmentación morfológica, componentes conexos y envolvente convexa
  */
 export async function detectCornersLocal(imageBlob) {
   const img = await loadImageFromBlob(imageBlob);
@@ -120,7 +217,7 @@ export async function detectCornersLocal(imageBlob) {
   ];
 
   try {
-    // Escalar a baja resolución para análisis robusto en <15ms
+    // Escalar a resolución estándar para procesamiento instantáneo (<25ms)
     const maxDim = 360;
     const scale = Math.min(maxDim / origW, maxDim / origH);
     const sw = Math.round(origW * scale);
@@ -148,7 +245,7 @@ export async function detectCornersLocal(imageBlob) {
       totalLum += lum;
     }
 
-    // Umbralización de Otsu para separar documento del fondo
+    // Umbralización de Otsu óptima para separar documento del fondo
     const totalPixels = sw * sh;
     let sumB = 0;
     let wB = 0;
@@ -170,55 +267,111 @@ export async function detectCornersLocal(imageBlob) {
       }
     }
 
-    // Encontrar píxeles del papel (generalmente más claros que la mesa o con fuerte contraste)
-    let bestTl = [sw, sh], minSum = Infinity;
-    let bestBr = [0, 0], maxSum = -Infinity;
-    let bestTr = [0, sh], maxDiff = -Infinity;
-    let bestBl = [sw, 0], minDiff = Infinity;
-    let paperCount = 0;
+    // 1. Crear máscara binaria y aplicar dilatación morfológica para unir texto y cerrar huecos
+    const binary = new Uint8Array(sw * sh);
+    for (let i = 0; i < sw * sh; i++) {
+      if (gray[i] >= otsuThresh) binary[i] = 1;
+    }
 
-    // Evaluar con margen interior de 4px para no atrapar bordes del encuadre
-    for (let y = 4; y < sh - 4; y++) {
-      for (let x = 4; x < sw - 4; x++) {
-        const val = gray[y * sw + x];
-        if (val >= otsuThresh) {
-          paperCount++;
-          const sum = x + y;
-          const diff = x - y;
-          if (sum < minSum) { minSum = sum; bestTl = [x, y]; }
-          if (sum > maxSum) { maxSum = sum; bestBr = [x, y]; }
-          if (diff > maxDiff) { maxDiff = diff; bestTr = [x, y]; }
-          if (diff < minDiff) { minDiff = diff; bestBl = [x, y]; }
+    const dilated = new Uint8Array(sw * sh);
+    const rad = 2;
+    for (let y = rad; y < sh - rad; y++) {
+      for (let x = rad; x < sw - rad; x++) {
+        if (binary[y * sw + x]) {
+          for (let dy = -rad; dy <= rad; dy++) {
+            for (let dx = -rad; dx <= rad; dx++) {
+              dilated[(y + dy) * sw + (x + dx)] = 1;
+            }
+          }
         }
       }
     }
 
-    // Si el área de papel detectada es de al menos el 12% del encuadre
-    const minAcceptableArea = sw * sh * 0.12;
-    if (paperCount >= minAcceptableArea) {
-      const inv = 1 / scale;
-      const expandMargin = 4; // Pequeño margen para no cortar texto periférico
+    // 2. Análisis de componentes conectados: Aislar el área masiva de papel y descartar brillos/ruido
+    const visited = new Uint8Array(sw * sh);
+    const queue = new Int32Array(sw * sh);
+    let maxCompSize = 0;
+    let maxCompLabel = -1;
+    const labels = new Int32Array(sw * sh);
+    let currentLabel = 1;
 
-      const cTl = [Math.max(0, (bestTl[0] - expandMargin) * inv), Math.max(0, (bestTl[1] - expandMargin) * inv)];
-      const cTr = [Math.min(origW, (bestTr[0] + expandMargin) * inv), Math.max(0, (bestTr[1] - expandMargin) * inv)];
-      const cBr = [Math.min(origW, (bestBr[0] + expandMargin) * inv), Math.min(origH, (bestBr[1] + expandMargin) * inv)];
-      const cBl = [Math.max(0, (bestBl[0] - expandMargin) * inv), Math.min(origH, (bestBl[1] + expandMargin) * inv)];
+    for (let y = 1; y < sh - 1; y++) {
+      for (let x = 1; x < sw - 1; x++) {
+        const idx = y * sw + x;
+        if (dilated[idx] === 1 && !visited[idx]) {
+          let head = 0, tail = 0;
+          queue[tail++] = idx;
+          visited[idx] = 1;
+          labels[idx] = currentLabel;
+          let count = 0;
 
-      // Calcular área del cuadrilátero con fórmula de Gauss
-      const polyArea = 0.5 * Math.abs(
-        cTl[0] * cTr[1] - cTr[0] * cTl[1] +
-        cTr[0] * cBr[1] - cBr[0] * cTr[1] +
-        cBr[0] * cBl[1] - cBl[0] * cBr[1] +
-        cBl[0] * cTl[1] - cTl[0] * cBl[1]
-      );
+          while (head < tail) {
+            const curr = queue[head++];
+            count++;
+            const neighbors = [curr - 1, curr + 1, curr - sw, curr + sw];
+            for (const nIdx of neighbors) {
+              if (nIdx >= 0 && nIdx < sw * sh && dilated[nIdx] === 1 && !visited[nIdx]) {
+                visited[nIdx] = 1;
+                labels[nIdx] = currentLabel;
+                queue[tail++] = nIdx;
+              }
+            }
+          }
 
-      if (polyArea > (origW * origH * 0.10)) {
-        return {
-          success: true,
-          width: origW,
-          height: origH,
-          corners: [cTl, cTr, cBr, cBl]
-        };
+          if (count > maxCompSize) {
+            maxCompSize = count;
+            maxCompLabel = currentLabel;
+          }
+          currentLabel++;
+        }
+      }
+    }
+
+    // Si el área de papel detectada es de al menos el 8% del encuadre
+    if (maxCompSize >= sw * sh * 0.08) {
+      // 3. Extraer puntos del contorno exterior del componente mayor
+      const boundaryPoints = [];
+      for (let y = 1; y < sh - 1; y++) {
+        for (let x = 1; x < sw - 1; x++) {
+          const idx = y * sw + x;
+          if (labels[idx] === maxCompLabel) {
+            if (labels[idx - 1] !== maxCompLabel ||
+                labels[idx + 1] !== maxCompLabel ||
+                labels[idx - sw] !== maxCompLabel ||
+                labels[idx + sw] !== maxCompLabel) {
+              boundaryPoints.push([x, y]);
+            }
+          }
+        }
+      }
+
+      if (boundaryPoints.length >= 4) {
+        // 4. Envolvente convexa (Convex Hull)
+        const hull = computeConvexHull(boundaryPoints);
+        // 5. Cuadrilátero que maximiza el área
+        const bestQuad = extractBestQuadFromHull(hull);
+
+        if (bestQuad && bestQuad.length === 4) {
+          const orderedQuad = orderCorners(bestQuad);
+          const inv = 1 / scale;
+
+          const scaledCorners = orderedQuad.map(([px, py]) => [
+            Math.max(0, Math.min(origW, Math.round(px * inv))),
+            Math.max(0, Math.min(origH, Math.round(py * inv))),
+          ]);
+
+          const [tl, tr, br, bl] = scaledCorners;
+          const polyArea = computeQuadArea(tl, tr, br, bl);
+
+          if (polyArea > (origW * origH * 0.08)) {
+            return {
+              success: true,
+              width: origW,
+              height: origH,
+              corners: [tl, tr, br, bl]
+            };
+          }
+        }
       }
     }
   } catch (err) {

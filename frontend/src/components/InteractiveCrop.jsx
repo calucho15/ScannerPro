@@ -19,7 +19,13 @@ const CORNER_NAMES = [
   'Inferior Izquierda (4/4)'
 ];
 
-export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
+export default function InteractiveCrop({
+  imageBlob,
+  onApplyCrop,
+  onBack,
+  pageIndex = 0,
+  totalPages = 1
+}) {
   const containerRef = useRef(null);
   const imageRef = useRef(null);
   const loupeCanvasRef = useRef(null);
@@ -309,12 +315,16 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   return (
     <div className="crop-screen" ref={containerRef}>
       <div className="crop-header">
-        <button className="icon-btn-ghost" onClick={onBack} title="Atrás" disabled={isWarping}>
+        <button className="icon-btn-ghost flex-shrink-0" onClick={onBack} title="Atrás" disabled={isWarping}>
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <span className="crop-title">Ajusta las 4 esquinas</span>
+        <div className="crop-header-center">
+          <span className="crop-title truncate">
+            {totalPages > 1 ? `Esquinas (Pág. ${pageIndex + 1}/${totalPages})` : 'Ajusta las 4 esquinas'}
+          </span>
+        </div>
         <button
-          className="btn-confirm-crop"
+          className="btn-confirm-crop flex-shrink-0"
           onClick={handleConfirmCrop}
           disabled={!corners || loadingDetection || isRotating || isWarping}
         >

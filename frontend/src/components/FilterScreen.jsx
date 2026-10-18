@@ -25,7 +25,14 @@ const FILTER_OPTIONS = [
   { id: 'original', name: 'Original', icon: ImageIcon, desc: 'Sin modificaciones' },
 ];
 
-export default function FilterScreen({ warpedBlob, onSavePage, onAddAnotherPage, onBackToCrop }) {
+export default function FilterScreen({
+  warpedBlob,
+  onSavePage,
+  onAddAnotherPage,
+  onBackToCrop,
+  pageIndex = 0,
+  totalPages = 1
+}) {
   const [baseBlob, setBaseBlob] = useState(warpedBlob);
   const [selectedFilter, setSelectedFilter] = useState('magic_color');
   const [currentDisplayUrl, setCurrentDisplayUrl] = useState(null);
@@ -130,35 +137,23 @@ export default function FilterScreen({ warpedBlob, onSavePage, onAddAnotherPage,
     onAddAnotherPage(getCurrentBlob());
   };
 
+  const isLastPage = totalPages <= 1 || pageIndex === totalPages - 1;
+
   return (
     <div className="filter-screen">
       <div className="filter-header">
-        <button className="icon-btn-ghost" onClick={onBackToCrop} title="Atrás a recortar">
+        <button className="icon-btn-ghost flex-shrink-0" onClick={onBackToCrop} title="Atrás a recortar">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <span className="filter-title">Acabado del documento</span>
-        <div className="flex items-center gap-1.5">
-          <button
-            className="icon-btn-ghost"
-            onClick={() => handleRotate(-90)}
-            disabled={isProcessing}
-            title="Rotar a la izquierda (-90°)"
-          >
-            <RotateCcw className="w-5 h-5 text-cyan-400" />
-          </button>
-          <button
-            className="icon-btn-ghost"
-            onClick={() => handleRotate(90)}
-            disabled={isProcessing}
-            title="Rotar a la derecha (+90°)"
-          >
-            <RotateCw className="w-5 h-5 text-cyan-400" />
-          </button>
-          <button className="btn-confirm-crop ml-1" onClick={handleFinish} disabled={isProcessing}>
-            <Check className="w-5 h-5 mr-1" />
-            <span>Listo</span>
-          </button>
+        <div className="filter-header-center">
+          <span className="filter-title truncate">
+            {totalPages > 1 ? `Filtros (Pág. ${pageIndex + 1}/${totalPages})` : 'Acabado del documento'}
+          </span>
         </div>
+        <button className="btn-confirm-crop flex-shrink-0" onClick={handleFinish} disabled={isProcessing}>
+          <Check className="w-4 h-4 mr-1" />
+          <span>{isLastPage ? 'Listo' : 'Siguiente'}</span>
+        </button>
       </div>
 
       <div className="filter-preview-viewport">
@@ -178,6 +173,28 @@ export default function FilterScreen({ warpedBlob, onSavePage, onAddAnotherPage,
             isOverlay={true}
           />
         )}
+      </div>
+
+      {/* Barra de rotación dedicada accesible sin saturar el encabezado */}
+      <div className="filter-rotate-bar">
+        <button
+          className="filter-rotate-btn"
+          onClick={() => handleRotate(-90)}
+          disabled={isProcessing}
+          title="Rotar a la izquierda (-90°)"
+        >
+          <RotateCcw className="w-4 h-4 mr-1.5 text-cyan-400" />
+          <span>Rotar Izq (-90°)</span>
+        </button>
+        <button
+          className="filter-rotate-btn"
+          onClick={() => handleRotate(90)}
+          disabled={isProcessing}
+          title="Rotar a la derecha (+90°)"
+        >
+          <RotateCw className="w-4 h-4 mr-1.5 text-cyan-400" />
+          <span>Rotar Der (+90°)</span>
+        </button>
       </div>
 
       {/* Barra de selección de filtros de documentos */}
@@ -202,14 +219,23 @@ export default function FilterScreen({ warpedBlob, onSavePage, onAddAnotherPage,
       </div>
 
       <div className="filter-bottom-actions">
-        <button className="btn-secondary" onClick={handleAddMore} disabled={isProcessing}>
-          <Plus className="w-5 h-5 mr-2 text-emerald-400" />
-          Añadir otra página
-        </button>
-        <button className="btn-primary" onClick={handleFinish} disabled={isProcessing}>
-          <Check className="w-5 h-5 mr-2" />
-          Guardar Documento
-        </button>
+        {!isLastPage ? (
+          <button className="btn-primary w-full" onClick={handleFinish} disabled={isProcessing}>
+            <span>Continuar con Pág. {pageIndex + 2} de {totalPages}</span>
+            <Check className="w-5 h-5 ml-2" />
+          </button>
+        ) : (
+          <>
+            <button className="btn-secondary" onClick={handleAddMore} disabled={isProcessing}>
+              <Plus className="w-5 h-5 mr-1 text-emerald-400" />
+              Añadir otra página
+            </button>
+            <button className="btn-primary" onClick={handleFinish} disabled={isProcessing}>
+              <Check className="w-5 h-5 mr-1" />
+              Finalizar y Guardar
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

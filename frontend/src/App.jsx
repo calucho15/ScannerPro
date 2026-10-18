@@ -8,6 +8,7 @@ import DocumentViewer from './components/DocumentViewer';
 import ShareCompleteScreen from './components/ShareCompleteScreen';
 import PortraitStudio from './components/PortraitStudio';
 import ChangelogModal from './components/ChangelogModal';
+import BatchCaptureModal from './components/BatchCaptureModal';
 import { warpPerspective } from './services/api';
 import { generateDemoDocumentBlob } from './services/demoDoc';
 import {
@@ -25,6 +26,7 @@ import './App.css';
 const VIEW_STATES = {
   HOME: 'HOME',
   CAMERA: 'CAMERA',
+  BATCH_CAPTURE: 'BATCH_CAPTURE',
   CROP: 'CROP',
   FILTER: 'FILTER',
   DOCUMENT: 'DOCUMENT',
@@ -39,7 +41,13 @@ export default function App() {
   // Biblioteca de documentos guardados en IndexedDB
   const [savedDocs, setSavedDocs] = useState([]);
 
-  // Estados del flujo de escaneo activo
+  // Flujo de captura por lotes (tomar fotos primero, editar después)
+  const [batchPhotos, setBatchPhotos] = useState([]);
+  const [batchEditQueue, setBatchEditQueue] = useState([]);
+  const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
+  const [processedBatchPages, setProcessedBatchPages] = useState([]);
+
+  // Estados de la página individual en edición activa
   const [capturedBlob, setCapturedBlob] = useState(null);
   const [warpedBlob, setWarpedBlob] = useState(null);
   
@@ -87,43 +95,67 @@ export default function App() {
     }
   };
 
-  // 1. Iniciar captura con cámara (Nativa de Android / Móvil)
-  const handleStartCamera = async () => {
+  // 1. Iniciar captura con cámara (Nativa de Android / Móvil o Web)
+  const handleStartCamera = async (isAdding = false) => {
+    if (!isAdding) {
+      setEditingDocId(null);
+      setEditingPageIndex(null);
+      setDocPages([]);
+      setDocTitle(createNewDocTitle());
+      setBatchPhotos([]);
+    }
+
     if (Capacitor.isNativePlatform()) {
       const photoBlob = await capturePhotoNative();
       if (photoBlob) {
-        handleImageReady(photoBlob);
+        setBatchPhotos((prev) => isAdding ? [...prev, photoBlob] : [photoBlob]);
+        setCurrentView(VIEW_STATES.BATCH_CAPTURE);
       }
     } else {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.onchange = (e) => {
-        const file = e.target.files?.[0];
-        if (file) handleImageReady(file);
-      };
-      input.click();
+      setCurrentView(VIEW_STATES.CAMERA);
     }
   };
 
-  // 2. Imagen seleccionada (desde cámara o archivo de galería)
-  const handleImageReady = (blob) => {
-    setCapturedBlob(blob);
+  // 2. Imágenes seleccionadas (desde selector de galería o cámara)
+  const handleImagesSelected = (blobs, isAdding = false) => {
+    if (!isAdding) {
+      setEditingDocId(null);
+      setEditingPageIndex(null);
+      setDocPages([]);
+      setDocTitle(createNewDocTitle());
+      setBatchPhotos([]);
+    }
+    const arr = Array.isArray(blobs) ? blobs : [blobs];
+    setBatchPhotos((prev) => isAdding ? [...prev, ...arr] : arr);
+    setCurrentView(VIEW_STATES.BATCH_CAPTURE);
+  };
+
+  // 3. Iniciar secuencia de edición a partir del lote de fotos capturadas
+  const handleProceedToEditBatch = () => {
+    if (batchPhotos.length === 0) return;
+    setBatchEditQueue(batchPhotos);
+    setCurrentBatchIndex(0);
+    setProcessedBatchPages([]);
+    setCapturedBlob(batchPhotos[0]);
     setCurrentView(VIEW_STATES.CROP);
   };
 
-  // 3. Cargar documento de prueba demo
+  // 4. Cargar documento de prueba demo
   const handleLoadDemo = async () => {
     setEditingDocId(null);
     setEditingPageIndex(null);
     setDocPages([]);
     setDocTitle(createNewDocTitle());
     const demoBlob = await generateDemoDocumentBlob();
-    handleImageReady(demoBlob);
+    setBatchPhotos([demoBlob]);
+    setBatchEditQueue([demoBlob]);
+    setCurrentBatchIndex(0);
+    setProcessedBatchPages([]);
+    setCapturedBlob(demoBlob);
+    setCurrentView(VIEW_STATES.CROP);
   };
 
-  // 4. Aplicar recorte y transformación de perspectiva
+  // 5. Aplicar recorte y transformación de perspectiva
   const handleApplyCrop = async (corners) => {
     try {
       const rectified = await warpPerspective(capturedBlob, corners);
@@ -134,72 +166,82 @@ export default function App() {
     }
   };
 
-  // 5. Guardar página finalizada (creación o re-edición de página existente)
+  // 6. Guardar página finalizada (edición por lotes o re-edición individual)
   const handleSavePage = async (finalPageBlob) => {
-    let updated;
+    // Si estamos en re-edición de una sola página existente
     if (editingPageIndex !== null) {
-      updated = [...docPages];
+      const updated = [...docPages];
       updated[editingPageIndex] = finalPageBlob;
+      setDocPages(updated);
       setEditingPageIndex(null);
-    } else {
-      updated = [...docPages, finalPageBlob];
-    }
-    setDocPages(updated);
 
-    if (editingDocId) {
-      try {
-        await updateDocument(editingDocId, { pages: updated });
-        await loadSavedDocuments();
-      } catch (e) {
-        console.warn("Error actualizando documento en storage:", e);
+      if (editingDocId) {
+        try {
+          await updateDocument(editingDocId, { pages: updated });
+          await loadSavedDocuments();
+        } catch (e) {
+          console.warn("Error actualizando documento en storage:", e);
+        }
       }
+      setCurrentView(VIEW_STATES.DOCUMENT);
+      return;
     }
-    setCurrentView(VIEW_STATES.DOCUMENT);
+
+    const updatedProcessed = [...processedBatchPages, finalPageBlob];
+    setProcessedBatchPages(updatedProcessed);
+
+    // ¿Hay más páginas pendientes en el lote de fotos?
+    if (currentBatchIndex < batchEditQueue.length - 1) {
+      const nextIdx = currentBatchIndex + 1;
+      setCurrentBatchIndex(nextIdx);
+      setCapturedBlob(batchEditQueue[nextIdx]);
+      setCurrentView(VIEW_STATES.CROP);
+    } else {
+      // ¡Todas las páginas del lote han sido editadas y corregidas!
+      const finalDocPages = [...docPages, ...updatedProcessed];
+      setDocPages(finalDocPages);
+      setBatchPhotos([]);
+      setBatchEditQueue([]);
+      setProcessedBatchPages([]);
+
+      if (editingDocId) {
+        try {
+          await updateDocument(editingDocId, { pages: finalDocPages });
+          await loadSavedDocuments();
+        } catch (e) {
+          console.warn("Error actualizando documento en storage:", e);
+        }
+      }
+      setCurrentView(VIEW_STATES.DOCUMENT);
+    }
   };
 
-  // 6. Añadir otra página al documento
+  // 7. Añadir otra página al documento
   const handleAddAnotherPage = async (finalPageBlob) => {
-    let updated;
-    if (editingPageIndex !== null) {
-      updated = [...docPages];
-      updated[editingPageIndex] = finalPageBlob;
-      setEditingPageIndex(null);
-    } else {
-      updated = [...docPages, finalPageBlob];
-    }
-    setDocPages(updated);
-
-    if (editingDocId) {
-      try {
-        await updateDocument(editingDocId, { pages: updated });
-        await loadSavedDocuments();
-      } catch (e) {
-        console.warn("Error actualizando documento en storage:", e);
-      }
-    }
+    const updatedProcessed = [...processedBatchPages, finalPageBlob];
+    setProcessedBatchPages(updatedProcessed);
 
     if (Capacitor.isNativePlatform()) {
       const photoBlob = await capturePhotoNative();
       if (photoBlob) {
-        handleImageReady(photoBlob);
+        setBatchEditQueue((prev) => [...prev, photoBlob]);
+        const nextIdx = currentBatchIndex + 1;
+        setCurrentBatchIndex(nextIdx);
+        setCapturedBlob(photoBlob);
+        setCurrentView(VIEW_STATES.CROP);
         return;
       }
     } else {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.onchange = (e) => {
-        const file = e.target.files?.[0];
-        if (file) handleImageReady(file);
-      };
-      input.click();
+      setCurrentView(VIEW_STATES.CAMERA);
       return;
     }
+
+    const finalDocPages = [...docPages, ...updatedProcessed];
+    setDocPages(finalDocPages);
     setCurrentView(VIEW_STATES.DOCUMENT);
   };
 
-  // 7. Eliminar una página del documento
+  // 7.1 Eliminar una página del documento
   const handleDeletePage = async (pageIndex) => {
     const updated = docPages.filter((_, idx) => idx !== pageIndex);
     setDocPages(updated);
@@ -213,7 +255,7 @@ export default function App() {
     }
   };
 
-  // 7.1 Actualizar una página rotada o procesada
+  // 7.2 Actualizar una página rotada o procesada
   const handleUpdatePage = async (pageIndex, newPageBlob) => {
     const updated = [...docPages];
     updated[pageIndex] = newPageBlob;
@@ -228,16 +270,22 @@ export default function App() {
     }
   };
 
-  // 8. Re-editar recorte de una página
+  // 8. Re-editar recorte de una página existente
   const handleEditPageCrop = (pageIdx, pageBlob) => {
     setEditingPageIndex(pageIdx);
+    setBatchEditQueue([pageBlob]);
+    setCurrentBatchIndex(0);
+    setProcessedBatchPages([]);
     setCapturedBlob(pageBlob);
     setCurrentView(VIEW_STATES.CROP);
   };
 
-  // 9. Re-editar filtro de una página
+  // 9. Re-editar filtro de una página existente
   const handleEditPageFilter = (pageIdx, pageBlob) => {
     setEditingPageIndex(pageIdx);
+    setBatchEditQueue([pageBlob]);
+    setCurrentBatchIndex(0);
+    setProcessedBatchPages([]);
     setWarpedBlob(pageBlob);
     setCurrentView(VIEW_STATES.FILTER);
   };
@@ -342,20 +390,8 @@ export default function App() {
       <main className="app-main-content">
         {currentView === VIEW_STATES.HOME && (
           <HomeScreen
-            onStartCamera={() => {
-              setEditingDocId(null);
-              setEditingPageIndex(null);
-              setDocPages([]);
-              setDocTitle(createNewDocTitle());
-              handleStartCamera();
-            }}
-            onImageSelect={(blob) => {
-              setEditingDocId(null);
-              setEditingPageIndex(null);
-              setDocPages([]);
-              setDocTitle(createNewDocTitle());
-              handleImageReady(blob);
-            }}
+            onStartCamera={() => handleStartCamera(false)}
+            onImageSelect={(blobs) => handleImagesSelected(blobs, false)}
             onOpenPortraitStudio={() => setCurrentView(VIEW_STATES.PORTRAIT_STUDIO)}
             currentDocPages={docPages}
             onViewCurrentDoc={() => setCurrentView(VIEW_STATES.DOCUMENT)}
@@ -373,17 +409,63 @@ export default function App() {
 
         {currentView === VIEW_STATES.CAMERA && (
           <CameraView
-            onCapture={handleImageReady}
-            onClose={() => setCurrentView(docPages.length > 0 ? VIEW_STATES.DOCUMENT : VIEW_STATES.HOME)}
+            onCapture={(blobs) => handleImagesSelected(blobs, true)}
+            onClose={() => {
+              if (batchPhotos.length > 0) {
+                setCurrentView(VIEW_STATES.BATCH_CAPTURE);
+              } else if (docPages.length > 0) {
+                setCurrentView(VIEW_STATES.DOCUMENT);
+              } else {
+                setCurrentView(VIEW_STATES.HOME);
+              }
+            }}
+          />
+        )}
+
+        {currentView === VIEW_STATES.BATCH_CAPTURE && (
+          <BatchCaptureModal
+            photos={batchPhotos}
+            onAddAnotherPhoto={async () => {
+              if (Capacitor.isNativePlatform()) {
+                const photoBlob = await capturePhotoNative();
+                if (photoBlob) {
+                  setBatchPhotos((prev) => [...prev, photoBlob]);
+                }
+              } else {
+                setCurrentView(VIEW_STATES.CAMERA);
+              }
+            }}
+            onAddFromGallery={(newFiles) => {
+              setBatchPhotos((prev) => [...prev, ...newFiles]);
+            }}
+            onRemovePhoto={(idx) => {
+              const updated = batchPhotos.filter((_, i) => i !== idx);
+              setBatchPhotos(updated);
+              if (updated.length === 0) {
+                setCurrentView(docPages.length > 0 ? VIEW_STATES.DOCUMENT : VIEW_STATES.HOME);
+              }
+            }}
+            onProceedToEdit={handleProceedToEditBatch}
+            onCancel={() => {
+              setBatchPhotos([]);
+              setCurrentView(docPages.length > 0 ? VIEW_STATES.DOCUMENT : VIEW_STATES.HOME);
+            }}
           />
         )}
 
         {currentView === VIEW_STATES.CROP && capturedBlob && (
           <InteractiveCrop
             imageBlob={capturedBlob}
+            pageIndex={currentBatchIndex}
+            totalPages={batchEditQueue.length || 1}
             onApplyCrop={handleApplyCrop}
             onBack={() => {
-              if (editingPageIndex !== null || docPages.length > 0) {
+              if (editingPageIndex !== null) {
+                setEditingPageIndex(null);
+                setCurrentView(VIEW_STATES.DOCUMENT);
+              } else if (batchPhotos.length > 0) {
+                setCurrentView(VIEW_STATES.BATCH_CAPTURE);
+              } else if (docPages.length > 0) {
                 setCurrentView(VIEW_STATES.DOCUMENT);
               } else {
                 setCurrentView(VIEW_STATES.HOME);
@@ -395,6 +477,8 @@ export default function App() {
         {currentView === VIEW_STATES.FILTER && warpedBlob && (
           <FilterScreen
             warpedBlob={warpedBlob}
+            pageIndex={currentBatchIndex}
+            totalPages={batchEditQueue.length || 1}
             onSavePage={handleSavePage}
             onAddAnotherPage={handleAddAnotherPage}
             onBackToCrop={() => setCurrentView(VIEW_STATES.CROP)}
@@ -408,7 +492,7 @@ export default function App() {
             onTitleChange={handleDocTitleChange}
             onAddPage={() => {
               setEditingPageIndex(null);
-              handleStartCamera();
+              handleStartCamera(true);
             }}
             onDeletePage={handleDeletePage}
             onUpdatePage={handleUpdatePage}

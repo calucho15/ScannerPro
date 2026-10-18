@@ -73,6 +73,9 @@ export default function CameraView({ onCapture, onClose }) {
     }
   };
 
+  const [capturedBlobs, setCapturedBlobs] = useState([]);
+  const [isFlashing, setIsFlashing] = useState(false);
+
   const takePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
@@ -82,29 +85,52 @@ export default function CameraView({ onCapture, onClose }) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 120);
+
     canvas.toBlob((blob) => {
       if (blob) {
-        stopCamera();
-        onCapture(blob);
+        setCapturedBlobs((prev) => [...prev, blob]);
       }
     }, 'image/jpeg', 0.95);
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const handleFinishCapture = () => {
+    if (capturedBlobs.length > 0) {
       stopCamera();
-      onCapture(file);
+      onCapture(capturedBlobs);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      stopCamera();
+      onCapture(files);
     }
   };
 
   return (
     <div className="camera-modal">
       <div className="camera-header">
-        <button className="icon-btn-ghost" onClick={onClose} title="Cerrar">
+        <button
+          className="icon-btn-ghost flex-shrink-0"
+          onClick={() => {
+            if (capturedBlobs.length > 0) {
+              handleFinishCapture();
+            } else {
+              onClose();
+            }
+          }}
+          title={capturedBlobs.length > 0 ? "Terminar captura" : "Cerrar"}
+        >
           <X className="w-6 h-6" />
         </button>
-        <span className="camera-title">Apunta hacia el documento</span>
+        <span className="camera-title truncate">
+          {capturedBlobs.length > 0
+            ? `${capturedBlobs.length} ${capturedBlobs.length === 1 ? 'página tomada' : 'páginas tomadas'}`
+            : 'Apunta hacia el documento'}
+        </span>
         <div className="camera-header-tools">
           {hasTorch && (
             <button className="icon-btn-ghost" onClick={toggleTorch} title="Linterna">
@@ -135,6 +161,7 @@ export default function CameraView({ onCapture, onClose }) {
               muted
               className="camera-video-stream"
             />
+            {isFlashing && <div className="camera-flash-overlay"></div>}
             {/* Guía visual de escaneo */}
             <div className="scanner-overlay-guide">
               <div className="corner-bracket top-left"></div>
@@ -152,6 +179,7 @@ export default function CameraView({ onCapture, onClose }) {
           type="file"
           ref={fileInputRef}
           accept="image/*"
+          multiple
           style={{ display: 'none' }}
           onChange={handleFileSelect}
         />
@@ -164,12 +192,22 @@ export default function CameraView({ onCapture, onClose }) {
         </button>
 
         {!cameraError && (
-          <button className="shutter-btn" onClick={takePhoto} title="Capturar">
+          <button className="shutter-btn" onClick={takePhoto} title="Tomar foto de la página">
             <div className="shutter-inner"></div>
           </button>
         )}
 
-        <div style={{ width: '48px' }}></div>
+        <div className="camera-finish-btn-wrapper">
+          {capturedBlobs.length > 0 && (
+            <button
+              className="btn-confirm-crop"
+              onClick={handleFinishCapture}
+              title="Continuar con las fotos tomadas"
+            >
+              <span>Listo ({capturedBlobs.length})</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import { capturePhotoNative, pickPhotoNative } from '../services/cameraService';
 import DocumentLibrary from './DocumentLibrary';
 
 export default function HomeScreen({
+  onStartCamera,
   onImageSelect,
   onOpenPortraitStudio,
   currentDocPages,
@@ -28,17 +29,10 @@ export default function HomeScreen({
   const galleryInputRef = useRef(null);
 
   // Manejar captura con cámara para documentos
-  const handleCameraClick = async () => {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const blob = await capturePhotoNative();
-        if (blob) {
-          onImageSelect(blob);
-          return;
-        }
-      } catch (e) {
-        console.warn("Fallo Capacitor Camera, recurriendo a selector de sistema:", e);
-      }
+  const handleCameraClick = () => {
+    if (onStartCamera) {
+      onStartCamera();
+      return;
     }
     cameraInputRef.current?.click();
   };
@@ -49,7 +43,7 @@ export default function HomeScreen({
       try {
         const blob = await pickPhotoNative();
         if (blob) {
-          onImageSelect(blob);
+          onImageSelect([blob]);
           return;
         }
       } catch (e) {
@@ -60,17 +54,17 @@ export default function HomeScreen({
   };
 
   const handleCameraChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onImageSelect(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      onImageSelect(files);
       e.target.value = '';
     }
   };
 
   const handleGalleryChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onImageSelect(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      onImageSelect(files);
       e.target.value = '';
     }
   };
@@ -90,6 +84,7 @@ export default function HomeScreen({
         type="file"
         ref={galleryInputRef}
         accept="image/*"
+        multiple
         style={{ display: 'none' }}
         onChange={handleGalleryChange}
       />
