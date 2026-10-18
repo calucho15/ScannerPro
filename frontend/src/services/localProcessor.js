@@ -104,23 +104,24 @@ export function orderCorners(pts) {
 }
 
 /**
- * Detecta esquinas de documento mediante análisis de gradientes de bordes o margen de respaldo
+ * Detecta esquinas de documento mediante análisis de gradientes de bordes y segmentación de papel
  */
 export async function detectCornersLocal(imageBlob) {
   const img = await loadImageFromBlob(imageBlob);
   const origW = img.naturalWidth || img.width;
   const origH = img.naturalHeight || img.height;
 
+  // Margen de respaldo limpio (8% de inserción)
   const defaultCorners = [
-    [origW * 0.05, origH * 0.05],
-    [origW * 0.95, origH * 0.05],
-    [origW * 0.95, origH * 0.95],
-    [origW * 0.05, origH * 0.95],
+    [origW * 0.08, origH * 0.08],
+    [origW * 0.92, origH * 0.08],
+    [origW * 0.92, origH * 0.92],
+    [origW * 0.08, origH * 0.92],
   ];
 
   try {
-    // Escalar a baja resolución para detección ultrarrápida (<10ms)
-    const maxDim = 320;
+    // Escalar a baja resolución para análisis robusto en <15ms
+    const maxDim = 360;
     const scale = Math.min(maxDim / origW, maxDim / origH);
     const sw = Math.round(origW * scale);
     const sh = Math.round(origH * scale);
@@ -131,53 +132,94 @@ export async function detectCornersLocal(imageBlob) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0, sw, sh);
 
-    const imgData = ctx.getImageData(0, 0, sw, sw);
+    const imgData = ctx.getImageData(0, 0, sw, sh);
     const data = imgData.data;
 
-    // Gradientes Sobel
+    // Calcular mapa de luminancia e histograma
     const gray = new Uint8Array(sw * sh);
+    const hist = new Int32Array(256);
+    let totalLum = 0;
+
     for (let i = 0; i < sw * sh; i++) {
       const idx = i * 4;
-      gray[i] = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]);
+      const lum = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]);
+      gray[i] = lum;
+      hist[lum]++;
+      totalLum += lum;
     }
 
-    const edgeThreshold = 35;
-    let minX = sw, maxX = 0, minY = sh, maxY = 0;
-    let edgeCount = 0;
+    // Umbralización de Otsu para separar documento del fondo
+    const totalPixels = sw * sh;
+    let sumB = 0;
+    let wB = 0;
+    let maxVariance = 0;
+    let otsuThresh = 128;
 
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t];
+      if (wB === 0) continue;
+      const wF = totalPixels - wB;
+      if (wF === 0) break;
+      sumB += t * hist[t];
+      const mB = sumB / wB;
+      const mF = (totalLum - sumB) / wF;
+      const variance = wB * wF * (mB - mF) * (mB - mF);
+      if (variance > maxVariance) {
+        maxVariance = variance;
+        otsuThresh = t;
+      }
+    }
+
+    // Encontrar píxeles del papel (generalmente más claros que la mesa o con fuerte contraste)
+    let bestTl = [sw, sh], minSum = Infinity;
+    let bestBr = [0, 0], maxSum = -Infinity;
+    let bestTr = [0, sh], maxDiff = -Infinity;
+    let bestBl = [sw, 0], minDiff = Infinity;
+    let paperCount = 0;
+
+    // Evaluar con margen interior de 4px para no atrapar bordes del encuadre
     for (let y = 4; y < sh - 4; y++) {
       for (let x = 4; x < sw - 4; x++) {
-        const gx = -gray[(y - 1) * sw + (x - 1)] + gray[(y - 1) * sw + (x + 1)]
-                   -2 * gray[y * sw + (x - 1)] + 2 * gray[y * sw + (x + 1)]
-                   -gray[(y + 1) * sw + (x - 1)] + gray[(y + 1) * sw + (x + 1)];
-        const gy = -gray[(y - 1) * sw + (x - 1)] - 2 * gray[(y - 1) * sw + x] - gray[(y - 1) * sw + (x + 1)]
-                   +gray[(y + 1) * sw + (x - 1)] + 2 * gray[(y + 1) * sw + x] + gray[(y + 1) * sw + (x + 1)];
-        const mag = Math.abs(gx) + Math.abs(gy);
-        if (mag > edgeThreshold * 4) {
-          edgeCount++;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
+        const val = gray[y * sw + x];
+        if (val >= otsuThresh) {
+          paperCount++;
+          const sum = x + y;
+          const diff = x - y;
+          if (sum < minSum) { minSum = sum; bestTl = [x, y]; }
+          if (sum > maxSum) { maxSum = sum; bestBr = [x, y]; }
+          if (diff > maxDiff) { maxDiff = diff; bestTr = [x, y]; }
+          if (diff < minDiff) { minDiff = diff; bestBl = [x, y]; }
         }
       }
     }
 
-    const boxW = maxX - minX;
-    const boxH = maxY - minY;
-    if (edgeCount > 80 && boxW > sw * 0.35 && boxH > sh * 0.35) {
-      const invScale = 1 / scale;
-      return {
-        success: true,
-        width: origW,
-        height: origH,
-        corners: [
-          [minX * invScale, minY * invScale],
-          [maxX * invScale, minY * invScale],
-          [maxX * invScale, maxY * invScale],
-          [minX * invScale, maxY * invScale]
-        ]
-      };
+    // Si el área de papel detectada es de al menos el 12% del encuadre
+    const minAcceptableArea = sw * sh * 0.12;
+    if (paperCount >= minAcceptableArea) {
+      const inv = 1 / scale;
+      const expandMargin = 4; // Pequeño margen para no cortar texto periférico
+
+      const cTl = [Math.max(0, (bestTl[0] - expandMargin) * inv), Math.max(0, (bestTl[1] - expandMargin) * inv)];
+      const cTr = [Math.min(origW, (bestTr[0] + expandMargin) * inv), Math.max(0, (bestTr[1] - expandMargin) * inv)];
+      const cBr = [Math.min(origW, (bestBr[0] + expandMargin) * inv), Math.min(origH, (bestBr[1] + expandMargin) * inv)];
+      const cBl = [Math.max(0, (bestBl[0] - expandMargin) * inv), Math.min(origH, (bestBl[1] + expandMargin) * inv)];
+
+      // Calcular área del cuadrilátero con fórmula de Gauss
+      const polyArea = 0.5 * Math.abs(
+        cTl[0] * cTr[1] - cTr[0] * cTl[1] +
+        cTr[0] * cBr[1] - cBr[0] * cTr[1] +
+        cBr[0] * cBl[1] - cBl[0] * cBr[1] +
+        cBl[0] * cTl[1] - cTl[0] * cBl[1]
+      );
+
+      if (polyArea > (origW * origH * 0.10)) {
+        return {
+          success: true,
+          width: origW,
+          height: origH,
+          corners: [cTl, cTr, cBr, cBl]
+        };
+      }
     }
   } catch (err) {
     console.warn("Auto-detección con error, usando márgenes por defecto:", err);
@@ -528,15 +570,16 @@ export async function applyDocumentWhiteBackground(imageBlob) {
 }
 
 /**
- * Rota un Blob de imagen 90 grados en el sentido de las agujas del reloj
+ * Rota un Blob de imagen en ángulos especificados (90° derecha, -90° izquierda, 180°, etc.)
  */
 export async function rotateImageBlob(imageBlob, degrees = 90) {
+  const normDeg = ((degrees % 360) + 360) % 360;
   const img = await loadImageFromBlob(imageBlob);
   const w = img.naturalWidth || img.width;
   const h = img.naturalHeight || img.height;
 
   const canvas = document.createElement('canvas');
-  if (degrees === 90 || degrees === 270) {
+  if (normDeg === 90 || normDeg === 270) {
     canvas.width = h;
     canvas.height = w;
   } else {
@@ -546,7 +589,7 @@ export async function rotateImageBlob(imageBlob, degrees = 90) {
 
   const ctx = canvas.getContext('2d');
   ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.rotate((degrees * Math.PI) / 180);
+  ctx.rotate((normDeg * Math.PI) / 180);
   ctx.drawImage(img, -w / 2, -h / 2);
 
   return await canvasToBlob(canvas, 0.94);
@@ -786,6 +829,142 @@ export async function generateIdPhotoSheet(photoBlob, count = 6) {
   ctx.fillStyle = '#6B7280';
   ctx.font = 'bold 20px sans-serif';
   ctx.fillText('ScannerPro • Plantilla de Fotos Carnet (Fondo Blanco)', marginX, 45);
+
+  return await canvasToBlob(canvas, 0.95);
+}
+
+/**
+ * Aplica un filtro de belleza y suavizado de piel natural para fotos carnet y retratos.
+ * Detecta tonos de piel mediante espacio YCbCr, suaviza imperfecciones y ojeras manteniendo
+ * ojos, cejas, labios y cabello 100% nítidos.
+ */
+export async function applyBeautyFilterLocal(imageBlob, level = 'natural') {
+  if (level === 'none' || !level) return imageBlob;
+
+  const img = await loadImageFromBlob(imageBlob);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  // Parámetros según el nivel de belleza
+  let blendFactor = 0.45;
+  let brightnessBoost = 1.04;
+  let radius = 2;
+
+  if (level === 'studio') {
+    blendFactor = 0.65;
+    brightnessBoost = 1.07;
+    radius = 3;
+  } else if (level === 'pro') {
+    blendFactor = 0.82;
+    brightnessBoost = 1.10;
+    radius = 4;
+  }
+
+  // 1. Identificar máscara de piel mediante YCbCr
+  const isSkin = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const idx = i * 4;
+    const r = data[idx];
+    const g = data[idx + 1];
+    const b = data[idx + 2];
+
+    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+    if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && r > g && g > b && (r - b) > 12) {
+      isSkin[i] = 1;
+    }
+  }
+
+  // 2. Crear copia suavizada con preservación de bordes para los píxeles de piel
+  const smoothed = new Uint8ClampedArray(data);
+
+  // Filtro de suavizado superficial rápido (Box con preservación de bordes)
+  for (let y = radius; y < h - radius; y++) {
+    for (let x = radius; x < w - radius; x++) {
+      const centerIdx = (y * w + x) * 4;
+      if (!isSkin[y * w + x]) continue;
+
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+      const cR = data[centerIdx];
+      const cG = data[centerIdx + 1];
+      const cB = data[centerIdx + 2];
+
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nIdx = ((y + dy) * w + (x + dx)) * 4;
+          const nr = data[nIdx];
+          const ng = data[nIdx + 1];
+          const nb = data[nIdx + 2];
+
+          // Preservar bordes de ojos y detalles: sólo promediar si la diferencia de color es moderada
+          const colorDiff = Math.abs(cR - nr) + Math.abs(cG - ng) + Math.abs(cB - nb);
+          if (colorDiff < 75) {
+            rSum += nr;
+            gSum += ng;
+            bSum += nb;
+            count++;
+          }
+        }
+      }
+
+      if (count > 0) {
+        const avgR = rSum / count;
+        const avgG = gSum / count;
+        const avgB = bSum / count;
+
+        // Mezclar piel suavizada con original y aplicar suave realce de luz
+        smoothed[centerIdx] = Math.min(255, Math.round((cR * (1 - blendFactor) + avgR * blendFactor) * brightnessBoost));
+        smoothed[centerIdx + 1] = Math.min(255, Math.round((cG * (1 - blendFactor) + avgG * blendFactor) * brightnessBoost));
+        smoothed[centerIdx + 2] = Math.min(255, Math.round((cB * (1 - blendFactor) + avgB * blendFactor) * brightnessBoost));
+      }
+    }
+  }
+
+  const finalImgData = new ImageData(smoothed, w, h);
+  ctx.putImageData(finalImgData, 0, 0);
+
+  return await canvasToBlob(canvas, 0.94);
+}
+
+/**
+ * Recorta un Blob de imagen a un rectángulo de coordenadas absolutas o normalizadas (0 a 1)
+ */
+export async function cropImageBlob(imageBlob, cropRect) {
+  const img = await loadImageFromBlob(imageBlob);
+  const origW = img.naturalWidth || img.width;
+  const origH = img.naturalHeight || img.height;
+
+  let { x, y, width, height } = cropRect;
+
+  // Si las coordenadas están normalizadas (0.0 a 1.0)
+  if (width <= 1.0 && height <= 1.0) {
+    x = Math.round(x * origW);
+    y = Math.round(y * origH);
+    width = Math.round(width * origW);
+    height = Math.round(height * origH);
+  }
+
+  // Sanity check
+  x = Math.max(0, Math.min(origW - 10, x));
+  y = Math.max(0, Math.min(origH - 10, y));
+  width = Math.max(20, Math.min(origW - x, width));
+  height = Math.max(20, Math.min(origH - y, height));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
 
   return await canvasToBlob(canvas, 0.95);
 }

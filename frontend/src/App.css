@@ -2778,3 +2778,179 @@ body {
 .studio-bottom-actions button {
   flex: 1;
 }
+
+/* ==========================================================================
+   9. Lupa Fija Superior (Stationary Top HUD) con Zoom Ligero
+   ========================================================================== */
+.crop-fixed-loupe-hud {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 60;
+  pointer-events: none;
+  animation: hudPop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes hudPop {
+  0% { transform: translateX(-50%) translateY(-10px) scale(0.9); opacity: 0; }
+  100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+}
+
+.loupe-corner-label {
+  background: rgba(0, 0, 0, 0.85);
+  color: var(--accent-emerald);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.loupe-canvas-box {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 0 2px var(--accent-emerald);
+  position: relative;
+  background: #000;
+}
+
+/* ==========================================================================
+   10. Encuadre Carnet con Guía Facial y Filtro de Belleza
+   ========================================================================== */
+.studio-crop-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #06090e;
+  overflow: hidden;
+  position: relative;
+}
+
+.studio-crop-box-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 60vh;
+}
+
+.studio-crop-source {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
+}
+
+.portrait-face-guide-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.face-oval-guide {
+  width: 170px;
+  height: 220px;
+  border: 2px dashed rgba(168, 85, 247, 0.8);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+}
+
+.face-guide-hint {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #d8b4fe;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.studio-crop-controls {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ratio-selector-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ratio-pill-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ratio-pill-btn.active {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: #a855f7;
+  color: #fff;
+}
+
+.beauty-filter-bar {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.beauty-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.beauty-buttons-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.beauty-pill-btn {
+  flex: 1;
+  padding: 6px 10px;
+  background: #1e2636;
+  border: 1px solid #2e3a50;
+  border-radius: 9999px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.beauty-pill-btn.active {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: #a855f7;
+  color: #fff;
+}

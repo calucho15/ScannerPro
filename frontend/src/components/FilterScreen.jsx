@@ -10,7 +10,8 @@ import {
   ShieldAlert,
   Image as ImageIcon,
   FileCheck,
-  RotateCw
+  RotateCw,
+  RotateCcw
 } from 'lucide-react';
 import { applyImageFilter, rotateImage } from '../services/api';
 import ProgressBar from './ProgressBar';
@@ -99,13 +100,13 @@ export default function FilterScreen({ warpedBlob, onSavePage, onAddAnotherPage,
     processFilter(filterId, baseBlob);
   };
 
-  const handleRotate90 = async () => {
+  const handleRotate = async (degrees) => {
     if (isProcessing) return;
     setIsProcessing(true);
     setProcessProgress(40);
-    setProcessStatus('Rotando imagen 90°...');
+    setProcessStatus(degrees < 0 ? 'Rotando hacia la izquierda...' : 'Rotando hacia la derecha...');
     try {
-      const rotated = await rotateImage(baseBlob, 90);
+      const rotated = await rotateImage(baseBlob, degrees);
       setBaseBlob(rotated);
       filterCacheRef.current = {};
       setProcessProgress(80);
@@ -136,16 +137,24 @@ export default function FilterScreen({ warpedBlob, onSavePage, onAddAnotherPage,
           <ArrowLeft className="w-6 h-6" />
         </button>
         <span className="filter-title">Acabado del documento</span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             className="icon-btn-ghost"
-            onClick={handleRotate90}
+            onClick={() => handleRotate(-90)}
             disabled={isProcessing}
-            title="Rotar 90°"
+            title="Rotar a la izquierda (-90°)"
+          >
+            <RotateCcw className="w-5 h-5 text-cyan-400" />
+          </button>
+          <button
+            className="icon-btn-ghost"
+            onClick={() => handleRotate(90)}
+            disabled={isProcessing}
+            title="Rotar a la derecha (+90°)"
           >
             <RotateCw className="w-5 h-5 text-cyan-400" />
           </button>
-          <button className="btn-confirm-crop" onClick={handleFinish} disabled={isProcessing}>
+          <button className="btn-confirm-crop ml-1" onClick={handleFinish} disabled={isProcessing}>
             <Check className="w-5 h-5 mr-1" />
             <span>Listo</span>
           </button>

@@ -1,6 +1,23 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Check, Maximize2, Sparkles, ArrowLeft, Loader2, Grid, RotateCw } from 'lucide-react';
+import {
+  Check,
+  Maximize2,
+  Sparkles,
+  ArrowLeft,
+  Loader2,
+  Grid,
+  RotateCw,
+  RotateCcw
+} from 'lucide-react';
 import { detectCorners, rotateImage } from '../services/api';
+import ProgressBar from './ProgressBar';
+
+const CORNER_NAMES = [
+  'Superior Izquierda (1/4)',
+  'Superior Derecha (2/4)',
+  'Inferior Derecha (3/4)',
+  'Inferior Izquierda (4/4)'
+];
 
 export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   const containerRef = useRef(null);
@@ -11,11 +28,16 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   const [imageSrc, setImageSrc] = useState(null);
   const [imgNaturalSize, setImgNaturalSize] = useState({ width: 0, height: 0 });
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
-  const [corners, setCorners] = useState(null); // [[x,y], [x,y], [x,y], [x,y]] en coordenadas nativas
+  const [corners, setCorners] = useState(null); // [[x,y], [x,y], [x,y], [x,y]]
   const [activeCornerIdx, setActiveCornerIdx] = useState(null);
   const [loadingDetection, setLoadingDetection] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [isRotating, setIsRotating] = useState(false);
+
+  // Barra de progreso al confirmar recorte y enderezar
+  const [isWarping, setIsWarping] = useState(false);
+  const [warpProgress, setWarpProgress] = useState(0);
+  const [warpStatus, setWarpStatus] = useState('');
 
   useEffect(() => {
     setActiveBlob(imageBlob);
@@ -44,8 +66,8 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   const setDefaultCorners = (w, h) => {
     const validW = w || 800;
     const validH = h || 600;
-    const mx = validW * 0.05;
-    const my = validH * 0.05;
+    const mx = validW * 0.08;
+    const my = validH * 0.08;
     setCorners([
       [mx, my],
       [validW - mx, my],
@@ -66,10 +88,9 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
       setDisplaySize({ width: rect.width, height: rect.height });
     }
 
-    // 1. Mostrar de inmediato margen inteligente por defecto
     setDefaultCorners(nw, nh);
 
-    // 2. Intentar afinar bordes con análisis de gradiente
+    // Intentar auto-detección robusta con Otsu y segmentación de papel
     setLoadingDetection(true);
     try {
       const data = await detectCorners(activeBlob);
@@ -83,7 +104,6 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     }
   };
 
-  // Mantener las dimensiones de pantalla sincronizadas
   useEffect(() => {
     if (!imageRef.current) return;
 
@@ -112,13 +132,13 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     };
   }, [imageSrc, imgNaturalSize.width]);
 
-  // Actualizar contenido de la Lupa de Precisión en tiempo real
+  // Actualizar Lupa con Zoom Ligero (1.15x) en posición fija HUD
   useEffect(() => {
     if (activeCornerIdx === null || !corners || !imageRef.current || !loupeCanvasRef.current) return;
     const canvas = loupeCanvasRef.current;
     const ctx = canvas.getContext('2d');
     const [nx, ny] = corners[activeCornerIdx];
-    const zoom = 1.45; // Zoom ligero y ergonómico para apuntar con precisión
+    const zoom = 1.15; // Zoom ligero y natural
     const size = 110;
 
     ctx.clearRect(0, 0, size, size);
@@ -130,7 +150,6 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, size, size);
 
-    // Dibujar imagen ampliada centrada en la esquina
     const srcSize = size / zoom;
     ctx.drawImage(
       imageRef.current,
@@ -144,14 +163,14 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
       size
     );
 
-    // Dibujar cruz de mira de precisión
+    // Cruz de mira precisa
     ctx.strokeStyle = '#10b981';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(size / 2 - 12, size / 2);
-    ctx.lineTo(size / 2 + 12, size / 2);
-    ctx.moveTo(size / 2, size / 2 - 12);
-    ctx.lineTo(size / 2, size / 2 + 12);
+    ctx.moveTo(size / 2 - 14, size / 2);
+    ctx.lineTo(size / 2 + 14, size / 2);
+    ctx.moveTo(size / 2, size / 2 - 14);
+    ctx.lineTo(size / 2, size / 2 + 14);
     ctx.stroke();
 
     ctx.restore();
@@ -182,11 +201,11 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
     ]);
   };
 
-  const handleRotate = async () => {
+  const handleRotate = async (degrees) => {
     if (isRotating) return;
     setIsRotating(true);
     try {
-      const rotated = await rotateImage(activeBlob, 90);
+      const rotated = await rotateImage(activeBlob, degrees);
       setActiveBlob(rotated);
       setCorners(null);
     } catch (err) {
@@ -199,72 +218,81 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   const getDisplayCoords = (pt) => {
     const w = displaySize.width || (imageRef.current ? imageRef.current.clientWidth : 0);
     const h = displaySize.height || (imageRef.current ? imageRef.current.clientHeight : 0);
+    const nw = imgNaturalSize.width || 1;
+    const nh = imgNaturalSize.height || 1;
 
-    if (!w || !h || !imgNaturalSize.width || !imgNaturalSize.height) {
-      return { x: 0, y: 0 };
-    }
-    const scaleX = w / imgNaturalSize.width;
-    const scaleY = h / imgNaturalSize.height;
     return {
-      x: pt[0] * scaleX,
-      y: pt[1] * scaleY,
+      x: (pt[0] / nw) * w,
+      y: (pt[1] / nh) * h,
     };
-  };
-
-  const getNativeCoords = (clientX, clientY) => {
-    if (!imageRef.current || !imgNaturalSize.width) return [0, 0];
-    const rect = imageRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    const y = Math.max(0, Math.min(clientY - rect.top, rect.height));
-
-    const scaleX = imgNaturalSize.width / (rect.width || 1);
-    const scaleY = imgNaturalSize.height / (rect.height || 1);
-
-    return [x * scaleX, y * scaleY];
   };
 
   const handlePointerDown = (idx, e) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      if (e.target && e.target.setPointerCapture && e.pointerId !== undefined) {
-        e.target.setPointerCapture(e.pointerId);
-      }
-    } catch (err) {}
     setActiveCornerIdx(idx);
+
+    const onPointerMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      if (!imageRef.current) return;
+
+      const rect = imageRef.current.getBoundingClientRect();
+      const clientX = moveEvent.clientX;
+      const clientY = moveEvent.clientY;
+
+      const clampedX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      const clampedY = Math.max(0, Math.min(rect.height, clientY - rect.top));
+
+      const nw = imgNaturalSize.width || 800;
+      const nh = imgNaturalSize.height || 600;
+
+      const realX = Math.round((clampedX / rect.width) * nw);
+      const realY = Math.round((clampedY / rect.height) * nh);
+
+      setCorners((prev) => {
+        if (!prev) return prev;
+        const next = [...prev];
+        next[idx] = [realX, realY];
+        return next;
+      });
+    };
+
+    const onPointerUp = () => {
+      setActiveCornerIdx(null);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp);
   };
 
-  const handlePointerMove = (e) => {
-    if (activeCornerIdx === null || !corners) return;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const [nativeX, nativeY] = getNativeCoords(clientX, clientY);
+  const handleConfirmCrop = async () => {
+    if (!corners || isWarping) return;
+    setIsWarping(true);
+    setWarpProgress(25);
+    setWarpStatus('Mapeando perspectiva del documento...');
 
-    setCorners((prev) => {
-      const next = [...prev];
-      next[activeCornerIdx] = [nativeX, nativeY];
-      return next;
-    });
-  };
+    const timer = setInterval(() => {
+      setWarpProgress((p) => (p < 85 ? p + 20 : p));
+    }, 100);
 
-  const handlePointerUp = (e) => {
     try {
-      if (e && e.target && e.target.releasePointerCapture && e.pointerId !== undefined) {
-        e.target.releasePointerCapture(e.pointerId);
-      }
-    } catch (err) {}
-    setActiveCornerIdx(null);
-  };
-
-  const handleConfirm = () => {
-    if (!corners) return;
-    onApplyCrop(corners, activeBlob);
+      setTimeout(async () => {
+        clearInterval(timer);
+        setWarpProgress(90);
+        setWarpStatus('Enderezando y optimizando geometría...');
+        await onApplyCrop(corners);
+      }, 250);
+    } catch (e) {
+      clearInterval(timer);
+      setIsWarping(false);
+      alert("Error al aplicar recorte: " + e.message);
+    }
   };
 
   const displayCorners = corners ? corners.map(getDisplayCoords) : [];
-  const polygonPoints = displayCorners.map((p) => `${p.x},${p.y}`).join(' ');
 
-  // Interpolación bilineal para líneas de cuadrícula 3x3
   const interpolateDisplay = (u, v) => {
     if (displayCorners.length < 4) return { x: 0, y: 0 };
     const [tl, tr, br, bl] = displayCorners;
@@ -279,65 +307,45 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
   };
 
   return (
-    <div
-      className="crop-screen"
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-    >
+    <div className="crop-screen" ref={containerRef}>
       <div className="crop-header">
-        <button className="icon-btn-ghost" onClick={onBack} title="Atrás">
+        <button className="icon-btn-ghost" onClick={onBack} title="Atrás" disabled={isWarping}>
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <span className="crop-title">Ajusta las 4 esquinas del documento</span>
+        <span className="crop-title">Ajusta las 4 esquinas</span>
         <button
           className="btn-confirm-crop"
-          onClick={handleConfirm}
-          disabled={!corners || isRotating}
-          title="Enderezar"
+          onClick={handleConfirmCrop}
+          disabled={!corners || loadingDetection || isRotating || isWarping}
         >
           <Check className="w-5 h-5 mr-1" />
           <span>Siguiente</span>
         </button>
       </div>
 
-      <div className="crop-canvas-wrapper" ref={containerRef}>
+      <div className="crop-canvas-wrapper">
         {imageSrc && (
           <div className="image-overlay-box">
             <img
               ref={imageRef}
               src={imageSrc}
-              alt="Documento capturado"
+              alt="Documento a recortar"
               className="crop-source-image"
               onLoad={handleImageLoaded}
               draggable={false}
             />
 
-            {/* Capa SVG con máscara de recorte y cuadrícula */}
-            {corners && imageRef.current && displayCorners.length === 4 && (
+            {/* Polígono y Cuadrícula 3x3 */}
+            {displayCorners.length === 4 && (
               <svg className="crop-svg-overlay">
-                <defs>
-                  <mask id="crop-mask">
-                    <rect width="100%" height="100%" fill="white" />
-                    <polygon points={polygonPoints} fill="black" />
-                  </mask>
-                </defs>
-                <rect
-                  width="100%"
-                  height="100%"
-                  fill="rgba(0, 0, 0, 0.6)"
-                  mask="url(#crop-mask)"
-                />
-
-                {/* Líneas delimitadoras de la hoja */}
                 <polygon
-                  points={polygonPoints}
-                  fill="none"
+                  points={displayCorners.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="rgba(16, 185, 129, 0.16)"
                   stroke="#10b981"
                   strokeWidth="2.5"
-                  strokeDasharray="4 2"
+                  strokeDasharray="none"
                 />
 
-                {/* Cuadrícula 3x3 de alineación perspectiva */}
                 {showGrid && (
                   <>
                     <line
@@ -396,17 +404,16 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
               </div>
             ))}
 
-            {/* Lupa Flotante de Precisión (2.5x zoom con cruz de mira) */}
+            {/* Lupa Fija en la parte superior (Stationary Top HUD) con Zoom Ligero (1.15x) */}
             {activeCornerIdx !== null && corners && displayCorners[activeCornerIdx] && (
-              <div
-                className="crop-magnifier-loupe"
-                style={{
-                  left: `${Math.max(60, Math.min(displaySize.width - 60, displayCorners[activeCornerIdx].x))}px`,
-                  top: `${displayCorners[activeCornerIdx].y < 95 ? displayCorners[activeCornerIdx].y + 75 : displayCorners[activeCornerIdx].y - 75}px`
-                }}
-              >
-                <canvas ref={loupeCanvasRef} width={110} height={110} className="loupe-canvas" />
-                <div className="loupe-ring" />
+              <div className="crop-fixed-loupe-hud">
+                <span className="loupe-corner-label">
+                  {CORNER_NAMES[activeCornerIdx] || `Esquina ${activeCornerIdx + 1}`}
+                </span>
+                <div className="loupe-canvas-box">
+                  <canvas ref={loupeCanvasRef} width={110} height={110} className="loupe-canvas" />
+                  <div className="loupe-ring" />
+                </div>
               </div>
             )}
           </div>
@@ -415,28 +422,43 @@ export default function InteractiveCrop({ imageBlob, onApplyCrop, onBack }) {
         {(loadingDetection || isRotating) && (
           <div className="detection-spinner-overlay">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-            <span>{isRotating ? 'Rotando imagen...' : 'Optimizando bordes...'}</span>
+            <span>{isRotating ? 'Rotando imagen...' : 'Detectando bordes de papel...'}</span>
           </div>
+        )}
+
+        {/* Barra de progreso al confirmar recorte */}
+        {isWarping && (
+          <ProgressBar
+            progress={warpProgress}
+            title="Enderezando documento"
+            statusText={warpStatus}
+            isOverlay={true}
+          />
         )}
       </div>
 
       <div className="crop-bottom-toolbar">
-        <button className="toolbar-tool-btn" onClick={handleAutoDetect}>
+        <button className="toolbar-tool-btn" onClick={handleAutoDetect} disabled={isWarping}>
           <Sparkles className="w-5 h-5 text-emerald-400" />
           <span>Auto-detectar</span>
         </button>
 
-        <button className="toolbar-tool-btn" onClick={() => setShowGrid(!showGrid)}>
+        <button className="toolbar-tool-btn" onClick={() => setShowGrid(!showGrid)} disabled={isWarping}>
           <Grid className={`w-5 h-5 ${showGrid ? 'text-emerald-400' : 'text-gray-400'}`} />
           <span>{showGrid ? 'Guías ON' : 'Guías OFF'}</span>
         </button>
 
-        <button className="toolbar-tool-btn" onClick={handleRotate} disabled={isRotating}>
-          <RotateCw className="w-5 h-5 text-cyan-400" />
-          <span>Rotar 90°</span>
+        <button className="toolbar-tool-btn" onClick={() => handleRotate(-90)} disabled={isRotating || isWarping} title="Rotar 90° hacia la izquierda">
+          <RotateCcw className="w-5 h-5 text-cyan-400" />
+          <span>Rotar Izq</span>
         </button>
 
-        <button className="toolbar-tool-btn" onClick={handleSelectAll}>
+        <button className="toolbar-tool-btn" onClick={() => handleRotate(90)} disabled={isRotating || isWarping} title="Rotar 90° hacia la derecha">
+          <RotateCw className="w-5 h-5 text-cyan-400" />
+          <span>Rotar Der</span>
+        </button>
+
+        <button className="toolbar-tool-btn" onClick={handleSelectAll} disabled={isWarping}>
           <Maximize2 className="w-5 h-5 text-gray-300" />
           <span>Todo el marco</span>
         </button>

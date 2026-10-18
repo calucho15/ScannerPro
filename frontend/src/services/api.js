@@ -11,7 +11,9 @@ import {
   detectCornersLocal,
   rotateImageBlob,
   applyPhotoWhiteBackground,
-  generateIdPhotoSheet
+  generateIdPhotoSheet,
+  applyBeautyFilterLocal,
+  cropImageBlob
 } from './localProcessor';
 import { Capacitor } from '@capacitor/core';
 
@@ -229,4 +231,18 @@ export async function removePhotoBackground(imageBlob, options = {}) {
  */
 export async function createIdPhotoSheet(imageBlob, count = 6) {
   return await generateIdPhotoSheet(imageBlob, count);
+}
+
+/**
+ * Aplica filtro de belleza y suavizado de piel natural para retratos
+ */
+export async function applyBeautyFilter(imageBlob, level = 'natural') {
+  return await applyBeautyFilterLocal(imageBlob, level);
+}
+
+/**
+ * Recorta una imagen a un área rectangular específica
+ */
+export async function cropImage(imageBlob, cropRect) {
+  return await cropImageBlob(imageBlob, cropRect);
 }

@@ -16,6 +16,7 @@ import {
   X,
   Sparkles,
   RotateCw,
+  RotateCcw,
   Zap,
   Printer
 } from 'lucide-react';
@@ -86,12 +87,12 @@ export default function DocumentViewer({
     }
   };
 
-  // Rotar página actual 90°
-  const handleRotateCurrentPage = async () => {
+  // Rotar página actual (-90° izquierda o +90° derecha)
+  const handleRotateCurrentPage = async (degrees = 90) => {
     if (isRotatingPage || !pages[currentPageIdx]) return;
     setIsRotatingPage(true);
     try {
-      const rotated = await rotateImage(pages[currentPageIdx], 90);
+      const rotated = await rotateImage(pages[currentPageIdx], degrees);
       if (onUpdatePage) {
         onUpdatePage(currentPageIdx, rotated);
       }
@@ -314,15 +315,30 @@ export default function DocumentViewer({
 
         <button
           className="btn-edit-page-action"
-          onClick={handleRotateCurrentPage}
+          onClick={() => handleRotateCurrentPage(-90)}
           disabled={isRotatingPage}
+          title="Rotar hacia la izquierda (-90°)"
         >
           {isRotatingPage ? (
-            <Loader2 className="w-4 h-4 mr-1.5 animate-spin text-amber-400" />
+            <Loader2 className="w-4 h-4 mr-1 animate-spin text-amber-400" />
           ) : (
-            <RotateCw className="w-4 h-4 mr-1.5 text-amber-400" />
+            <RotateCcw className="w-4 h-4 mr-1 text-amber-400" />
           )}
-          <span>Rotar 90°</span>
+          <span>Rotar Izq</span>
+        </button>
+
+        <button
+          className="btn-edit-page-action"
+          onClick={() => handleRotateCurrentPage(90)}
+          disabled={isRotatingPage}
+          title="Rotar hacia la derecha (+90°)"
+        >
+          {isRotatingPage ? (
+            <Loader2 className="w-4 h-4 mr-1 animate-spin text-amber-400" />
+          ) : (
+            <RotateCw className="w-4 h-4 mr-1 text-amber-400" />
+          )}
+          <span>Rotar Der</span>
         </button>
 
         {pages.length > 1 && (
